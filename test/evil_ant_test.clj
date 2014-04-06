@@ -40,6 +40,20 @@
     (e/disj! e h1 h2 h3)
     (?handlers= e nil)))
 
+(deftest conj!-thread-safety
+  (let [e (e/event)
+        agents (repeatedly 1000 #(agent e))]
+    (doseq [a agents] (send a #(e/conj! % (e/handler ()))))
+    (apply await agents)
+    (?= (count (e/handlers e)) 1000))
+  (let [h (e/handler ())
+        agents (repeatedly 1000 #(agent h))]
+    (doseq [a agents] (send a #(e/conj! (e/event) %)))
+    (apply await agents)
+    (?= (count (e/events h)) 1000)))
+
+;emitter disj thread safety
+
 (deftest closing-handler
   (let [e (e/event)
         h (e/handler () e)]
@@ -78,10 +92,11 @@
     (e/close! h1)
     (?throws (e/conj! e2 h1) ClosedAbsorberException)))
 
-;enabled and disabled handlers
-
 ;emitter close thread safety
-;emitter conj and disj thread safety
+;;other threads see closing
+;;cannot conj to closed emitter/absorber
+
+;enabled and disabled handlers
 
 (comment
 (deftest events-as-handlers

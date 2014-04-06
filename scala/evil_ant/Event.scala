@@ -1,7 +1,5 @@
 package evil_ant
 
-import scala.collection.immutable.Set
-
 trait Closeable extends java.io.Closeable {
   private[this] var _isOpen = true
 
@@ -17,8 +15,19 @@ class ClosedAbsorberException(msg: String) extends RuntimeException(msg) {
   def this() = this("")
 }
 
+class Set[T] extends scala.collection.mutable.Set[T] {
+  @volatile
+  private [this] var _set = scala.collection.immutable.Set[T]()
+
+  override def +=(e: T) = this.synchronized { _set += e; this }
+  override def -=(e: T) = this.synchronized { _set -= e; this }
+  override def contains(e: T) = _set.contains(e)
+  override def iterator = _set.iterator
+}
+
 class Event extends Closeable {
-  private var _handlers = Set[Handler]()
+  @volatile
+  private var _handlers = new Set[Handler]()
   private def handlers_=(v: Set[Handler]) { _handlers = v }
   def handlers = _handlers
 
@@ -38,7 +47,8 @@ class Event extends Closeable {
 }
 
 class Handler extends Closeable {
-  private var _events = Set[Event]()
+  @volatile
+  private var _events = new Set[Event]()
   private def events_=(v: Set[Event]) { _events = v }
   def events = _events
 
