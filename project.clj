@@ -9,7 +9,7 @@
   :source-paths ["src/"]
   :prep-tasks ["scalac"]
   :scala-source-path "scala"
-  :scala-version "2.10.2"
+  :scala-version "2.10.4"
   :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.scala-lang/scala-library "2.10.2"]])
+                 [org.scala-lang/scala-library "2.10.4"]])
 

@@ -1,6 +1,7 @@
 (ns evil-ant-test
   (:require [evil-ant :as e]
-            [khazad-dum :refer :all]))
+            [khazad-dum :refer :all])
+  (:import [evil_ant ClosedEmitterException ClosedAbsorberException]))
 
 (defmacro ?handlers= [event coll] `(?= (seq (e/handlers ~event)) ~coll))
 (defmacro ?events= [handler coll] `(?= (seq (e/events ~handler)) ~coll))
@@ -42,23 +43,40 @@
 (deftest closing-handler
   (let [e (e/event)
         h (e/handler () e)]
-    (.close h)
+    (e/close! h)
     (?handlers= e nil)
     (?events= h nil)))
 
 (deftest closing-events
   (let [e (e/event)
         [h1 h2 h3] (repeatedly 3 #(e/handler () e))]
-    (.close e)
+    (e/close! e)
     (?handlers= e nil)
     (?events= h1 nil)
     (?events= h2 nil)
     (?events= h3 nil)))
 
-;cannot emit closed emitter
-;emitter/absorber's open?
-;cannot add emitter to closed absorber
-;cannot add absorber to closed emitter
+(deftest emitter-and-absorber-open?
+  (let [e (e/event) h (e/handler ())]
+    (?true (e/open? e))
+    (?true (e/open? h))
+    (e/close! e)
+    (?false (e/open? e))
+    (e/close! h)
+    (?false (e/open? h))))
+
+(deftest cannot-emit-closed-emitter
+  (let [e (e/event)]
+    (e/close! e)
+    (?throws (e/emit! e 123) ClosedEmitterException)))
+
+(deftest cannot-conj-for-closed-emitter-and-absorber
+  (let [[e1 e2] (repeatedly 2 #(e/event))
+        [h1 h2] (repeatedly 2 #(e/handler ()))]
+    (e/close! e1)
+    (?throws (e/conj! e1 h1) ClosedEmitterException)
+    (e/close! h1)
+    (?throws (e/conj! e2 h1) ClosedAbsorberException)))
 
 ;enabled and disabled handlers
 

@@ -21,6 +21,9 @@
   ([a e] (.conj e a) a)
   ([a e & es] (reduce absorber-conj (absorber-conj a e) es)))
 
+(defn close! [obj] (.close obj))
+(defn open? [obj] (.isOpen obj))
+
 ;;
 ;; Events and handlers 
 ;;
