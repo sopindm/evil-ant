@@ -6,14 +6,21 @@
 (defmacro ?handlers= [event coll] `(?= (seq (e/handlers ~event)) ~coll))
 (defmacro ?events= [handler coll] `(?= (seq (e/events ~handler)) ~coll))
 
+(defn- conj-action [actions e s] (swap! actions conj {:src s :emitter e}))
+
+(defmacro action-handler [atom event]
+  `(e/handler ([e# s#] (conj-action ~atom e# s#)) ~event))
+(defmacro ?action= [actions [emitter source]]
+  `(?= (deref ~actions) [{:src ~source :emitter ~emitter}]))
+
 (deftest simple-events-and-handlers
   (let [actions (atom [])
         e (e/event)
-        h (e/handler ([e s] (swap! actions conj {:src s :emitter e})) e)]
+        h (action-handler actions e)]
     (?handlers= e [h])
     (?events= h [e])
     (e/emit! e 123)
-    (?= @actions [{:src 123 :emitter e}])))
+    (?action= actions [e 123])))
 
 (deftest explicit-conj!
   (let [e (e/event)
@@ -123,7 +130,7 @@
 (deftest disabling-handler
   (let [actions (atom [])
         e (e/event)
-        h (e/handler ([e s] (swap! actions conj {:src s :emitter e})) e)]
+        h (action-handler actions e)]
     (?true (e/enabled? h))
     (e/disable! h)
     (e/emit! e 123)
@@ -133,21 +140,21 @@
 (deftest reenabling-handler
   (let [actions (atom [])
         e (e/event)
-        h (e/handler ([e s] (swap! actions conj {:src s :emitter e})) e)]
+        h (action-handler actions e)]
     (e/disable! h)
     (e/enable! h)
     (?true (e/enabled? h))
     (e/emit! e 123)
-    (?= @actions [{:src 123 :emitter e}])))
+    (?action= actions [e 123])))
 
-(comment
 (deftest events-as-handlers
   (let [actions (atom [])
         e (e/event)
-        h (e/event ([e s] (swap! actions conj :emit e :source s)) e)]
+        h (e/event ([e s] (conj-action actions e s)) e)]
     (e/emit! e 123)
-    (?= (seq @actions) [:emit e :source 123])))
+    (?action= actions [e 123])))
 
+(comment
 (deftest one-shot-event
   (let [sources (atom [])
         e (e/event () :one-shot)

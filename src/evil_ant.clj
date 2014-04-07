@@ -50,7 +50,7 @@
 (defmacro event
   ([] `(Event.))
   ([[[emitter source] & handler] & events]
-     `(handler- Event #'setup-event- ([~emitter ~source] ~@handler) ~@events)))
+     `(handler- Event ([~emitter ~source] ~@handler) #'setup-event- ~@events)))
 
 (defn- scala-set [set] (scala.collection.JavaConversions/asJavaSet set))
 

@@ -26,7 +26,7 @@ class Set[T] extends scala.collection.mutable.Set[T] {
   override def iterator = _set.iterator
 }
 
-class Event extends Closeable {
+class Event extends Handler with Closeable {
   @volatile
   private var _handlers = new Set[Handler]()
   private def handlers_=(v: Set[Handler]) { _handlers = v }
