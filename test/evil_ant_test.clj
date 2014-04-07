@@ -52,7 +52,19 @@
     (apply await agents)
     (?= (count (e/events h)) 1000)))
 
-;emitter disj thread safety
+(deftest disj!-thread-safety
+  (let [e (e/event)
+        handlers (repeatedly 1000 #(e/handler () e))
+        agents (map agent handlers)]
+    (doseq [a agents] (send a #(e/disj! e %)))
+    (apply await agents)
+    (?= (count (e/handlers e)) 0))
+  (let [h (e/handler ())
+        events (repeatedly 1000 #(doto (e/event) (e/conj! h)))
+        agents (map agent events)]
+    (doseq [a agents] (send a #(e/disj! % h)))
+    (apply await agents)
+    (?= (count (e/events h)) 0)))
 
 (deftest closing-handler
   (let [e (e/event)
@@ -92,11 +104,41 @@
     (e/close! h1)
     (?throws (e/conj! e2 h1) ClosedAbsorberException)))
 
-;emitter close thread safety
-;;other threads see closing
-;;cannot conj to closed emitter/absorber
+(comment 
+  (deftest cannot-conj-to-closed-emitter
+    (let [e (e/event)
+          agents (repeatedly 100000 #(agent (e/handler ())))]
+      (doseq [a agents] (send-off a #(do (Thread/sleep 100) (e/conj! e %))))
+      (Thread/sleep 100)
+      (.close e)
+      (?= (count (e/handlers e)) 0))
+    (let [h (e/handler ())
+          agents (repeatedly 100000 #(agent (e/event)))]
+      (doseq [a agents] (send-off a #(do (Thread/sleep 100) (e/conj! % h))))
+      (Thread/sleep 100)
+      (.close h)
+      (?= (count (e/events h)) 0)))
+  "Takes too much time")
 
-;enabled and disabled handlers
+(deftest disabling-handler
+  (let [actions (atom [])
+        e (e/event)
+        h (e/handler ([e s] (swap! actions conj {:src s :emitter e})) e)]
+    (?true (e/enabled? h))
+    (e/disable! h)
+    (e/emit! e 123)
+    (?= @actions [])
+    (?events= h [e])))
+
+(deftest reenabling-handler
+  (let [actions (atom [])
+        e (e/event)
+        h (e/handler ([e s] (swap! actions conj {:src s :emitter e})) e)]
+    (e/disable! h)
+    (e/enable! h)
+    (?true (e/enabled? h))
+    (e/emit! e 123)
+    (?= @actions [{:src 123 :emitter e}])))
 
 (comment
 (deftest events-as-handlers

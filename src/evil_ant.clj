@@ -24,6 +24,10 @@
 (defn close! [obj] (.close obj))
 (defn open? [obj] (.isOpen obj))
 
+(defn enabled? [obj] (.isEnabled obj))
+(defn enable! [obj] (.enable obj))
+(defn disable! [obj] (.disable obj))
+
 ;;
 ;; Events and handlers 
 ;;

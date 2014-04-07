@@ -1,6 +1,7 @@
 package evil_ant
 
 trait Closeable extends java.io.Closeable {
+  @volatile
   private[this] var _isOpen = true
 
   def isOpen = _isOpen
@@ -38,12 +39,17 @@ class Event extends Closeable {
   def disj(h: Handler) = -=(h)
 
   private[this] def requireOpen { if(!isOpen) throw new ClosedEmitterException() }
-  private[evil_ant] def pushHandler(h: Handler) { requireOpen; handlers += h }
+  private[evil_ant] def pushHandler(h: Handler) {
+    requireOpen;
+    handlers += h
+    if(!isOpen) handlers -= h
+  }
+
   private[evil_ant] def popHandler(h: Handler) { handlers -= h }
 
   override def close() { super.close(); handlers.foreach(this -= _) }
 
-  def emit(value: AnyRef) { requireOpen; handlers.foreach(_.absorb(this, value)) }
+  def emit(value: AnyRef) { requireOpen; handlers.foreach(_.callAbsorb(this, value)) }
 }
 
 class Handler extends Closeable {
@@ -53,10 +59,21 @@ class Handler extends Closeable {
   def events = _events
 
   private[this] def requireOpen { if(!isOpen) throw new ClosedAbsorberException() }
-  private[evil_ant] def pushEvent(e: Event) { requireOpen; events += e }
+  private[evil_ant] def pushEvent(e: Event) {
+    requireOpen;
+    events += e
+    if(!isOpen) events -= e
+  }
   private[evil_ant] def popEvent(e: Event) { events -= e }
 
   override def close() { super.close(); events.foreach(_ -= this) }
 
-  def absorb(e: Event, value: AnyRef) {}
+  @volatile
+  private var _isEnabled = true
+  def enable { _isEnabled = true }
+  def disable { _isEnabled = false }
+  def isEnabled = _isEnabled
+
+  private[evil_ant] def callAbsorb(e: Event, value: AnyRef) { if(isEnabled) absorb(e, value) }
+  protected def absorb(e: Event, value: AnyRef) {}
 }
