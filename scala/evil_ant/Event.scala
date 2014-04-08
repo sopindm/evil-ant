@@ -1,2 +1,0 @@
-package evil_ant
-
