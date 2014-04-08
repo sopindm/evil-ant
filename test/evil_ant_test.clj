@@ -186,6 +186,17 @@
     (?actions= actions [e 3])
     (?false (e/open? e))))
 
+(deftest events-with-attachment
+  (let [actions (atom [])
+        e (e/event)
+        h (action-handler actions e)]
+    (e/attach! e :something)
+    (?= (e/attachment e) :something)
+    (e/emit! e 123)
+    (?actions= actions [e :something])
+    (.close e)
+    (?= (e/attachment e) nil)))
+
 (comment
 ;signals attachment (check attach and removing on close)
 

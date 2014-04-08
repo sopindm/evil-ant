@@ -28,6 +28,9 @@
 (defn enable! [obj] (.enable obj))
 (defn disable! [obj] (.disable obj))
 
+(defn attach! [emitter obj] (.attach emitter obj))
+(defn attachment [emitter] (.attachment emitter))
+
 ;;
 ;; Events and handlers 
 ;;
