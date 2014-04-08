@@ -32,30 +32,43 @@
 ;; Events and handlers 
 ;;
 
-(defmacro handler- [class [[emitter source] & handler] setup & events-and-options]
-  `(~setup (proxy [~class] [] (absorb [~(or emitter '_) ~(or source '_)] ~@handler))
+(defmacro handler- [class args [[emitter source] & handler] setup & events-and-options]
+  `(~setup (proxy [~class] [~@args] (absorb [~(or emitter '_) ~(or source '_)] ~@handler))
            ~@events-and-options))
 
 (defmacro handler [[[emitter source] & handler] & events]
-  `(handler- Handler ([~emitter ~source] ~@handler) #'absorber-conj ~@events))
+  `(handler- Handler () ([~emitter ~source] ~@handler) #'absorber-conj ~@events))
 
 (defn- setup-event- 
   ([event] event)
   ([event & args]
      (let [events (remove keyword? args)
            options (filter keyword? args)]
-       (when (some #{:one-shot} options) (.oneShot_$eq event true))
        (apply absorber-conj event events))))
 
 (defmacro event
   ([] `(Event.))
   ([[[emitter source] & handler] & events]
-     `(handler- Event ([~emitter ~source] ~@handler) #'setup-event- ~@events)))
+     `(handler- Event [~(boolean (some #{:one-shot} events))] 
+                ([~emitter ~source] ~@handler) #'setup-event- ~@events)))
 
 (defn- scala-set [set] (scala.collection.JavaConversions/asJavaSet set))
 
 (defn handlers [event] (scala-set (.handlers event)))
 (defn events [handler] (scala-set (.events handler)))
+
+(defn when-any ([] (proxy [Event] [] (absorb [e s] (.emit this s))))
+  ([& events] (apply absorber-conj (when-any) events)))
+
+(defn when-every ([] (proxy [Event] [true]
+                       (absorb [e s]
+                         (disj! e this)
+                         (when (-> this events .isEmpty)
+                           (emit! this s)))))
+  ([& events] (apply absorber-conj (when-every) events)))
+
+         
+
 
 
 

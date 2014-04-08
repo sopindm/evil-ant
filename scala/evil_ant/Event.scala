@@ -26,7 +26,9 @@ class Set[T] extends scala.collection.mutable.Set[T] {
   override def iterator = _set.iterator
 }
 
-class Event extends Handler with Closeable {
+class Event(oneShot: Boolean) extends Handler with Closeable {
+  def this() = this(false)
+
   @volatile
   private var _handlers = new Set[Handler]()
   private def handlers_=(v: Set[Handler]) { _handlers = v }
@@ -49,7 +51,11 @@ class Event extends Handler with Closeable {
 
   override def close() { super.close(); handlers.foreach(this -= _) }
 
-  def emit(value: AnyRef) { requireOpen; handlers.foreach(_.callAbsorb(this, value)) }
+  def emit(value: AnyRef) {
+    requireOpen
+    handlers.foreach(_.callAbsorb(this, value))
+    if(oneShot) close()
+  }
 }
 
 class Handler extends Closeable {

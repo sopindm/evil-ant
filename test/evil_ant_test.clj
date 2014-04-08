@@ -12,6 +12,8 @@
   `(e/handler ([e# s#] (conj-action ~atom e# s#)) ~event))
 (defmacro ?action= [actions [emitter source]]
   `(?= (deref ~actions) [{:src ~source :emitter ~emitter}]))
+(defmacro ?actions= [actions & expected]
+  `(?= (deref ~actions) [~@(map (fn [[e s]] {:emitter e :src s}) expected)]))
 
 (deftest simple-events-and-handlers
   (let [actions (atom [])
@@ -154,48 +156,35 @@
     (e/emit! e 123)
     (?action= actions [e 123])))
 
-(comment
 (deftest one-shot-event
-  (let [sources (atom [])
+  (let [actions (atom [])
         e (e/event () :one-shot)
-        h (e/handler ([e s] (swap! sources conj s)) e)]
+        h (action-handler actions e)]
     (e/emit! e 123)
-    (?= @sources [123])
-    (?= (seq (e/handlers e)) nil)
-    (e/emit! e 123)
-    (?= @sources [123])))
+    (?action= actions [e 123])
+    (?false (e/open? e))
+    (?handlers= e nil)))
 
 (deftest when-any-event
-  (let [emitters (atom [])
-        sources (atom [])
-        e1 (e/event)
-        e2 (e/event)
+  (let [actions (atom [])
+        [e1 e2] (repeatedly 2 #(e/event))
         e (e/when-any e1 e2)
-        h (e/handler ([e s]
-                        (swap! emitters conj e)
-                        (swap! sources conj s)) e)]
+        h (action-handler actions e)]
     (e/emit! e1 1)
-    (?= (seq @emitters) [e])
-    (?= (seq @sources) [1])
+    (?action= actions [e 1])
     (e/emit! e2 2)
-    (?= (seq @sources) [1 2])
-    (?= (seq @emitters) [e e])))
+    (?actions= actions [e 1] [e 2])))
 
 (deftest when-every-test
-  (let [sources (atom [])
+  (let [actions (atom [])
         [e1 e2 e3] (repeatedly 3 #(e/event))
         e (e/when-every e1 e2 e3)
-        h (e/handler ([_ s] (swap! sources conj s)) e)]
+        h (action-handler actions e)]
     (e/emit! e1 1)
     (e/emit! e2 2)
     (e/emit! e3 3)
-    (?= (seq @sources) [3])
-    (?= (seq (e/emitters h)) nil)
-    (?= (seq (e/emitters e)) nil)
-    (?= (seq (e/handlers e)) nil)
-    (?= (seq (e/handlers e1)) nil)
-    (?= (seq (e/handlers e2)) nil)
-    (?= (seq (e/handlers e3)) nil)))
+    (?actions= actions [e 3])
+    (?false (e/open? e))))
 
 (comment
 ;signals attachment (check attach and removing on close)
@@ -384,7 +373,7 @@
     (e/start! t1) (e/start! t2)
     (Thread/sleep 1)
     (?= (set @a) #{1 2})
-    (future-cancel f)))))
+    (future-cancel f))))
 
 
 
