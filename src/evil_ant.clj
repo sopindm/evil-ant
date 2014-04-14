@@ -1,12 +1,14 @@
 (ns evil-ant
   (:refer-clojure :exclude [conj! disj!])
-  (:import [evil_ant Event Handler]))
+  (:import [evil_ant Event Handler SwitchSignal]))
 
 ;;
 ;; Emitter/absorber functions
 ;;
 
 (defn emit! [emitter arg] (.emit emitter arg))
+(defn emit-now! [emitter arg] (.emitNow emitter arg))
+(defn emit-in! [emitter arg timeout] (.emitIn emitter arg timeout))
 
 (defn conj! ([emitter] emitter)
   ([emitter absorber] (.conj emitter absorber))
@@ -70,9 +72,20 @@
                            (emit! this s)))))
   ([& events] (apply absorber-conj (when-every) events)))
 
+;;
+;; Signals
+;;
+
+(defmacro defsignal [[name [& args] & body] [set-name & set-body]]
+  `(do (defn ~name ([~@args] ~@body)
+         ([~@args attachment#] (doto (~name ~@args) (attach! attachment#))))
+       (defn ~set-name ([] ~@set-body)
+         ([& triggers#] (reduce conj! (~set-name) triggers#)))))
+
+(defn switch [] (SwitchSignal.))
          
-
-
+(defn turn-on! [switch] (.turnOn switch))
+(defn turn-off! [switch] (.turnOff switch))
 
 
 

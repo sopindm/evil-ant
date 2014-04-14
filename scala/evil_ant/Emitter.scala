@@ -28,6 +28,8 @@ class Set[T] extends scala.collection.mutable.Set[T] {
 
 trait Emittable extends Closeable {
   def emit(value: AnyRef) {}
+  def emitIn(value: AnyRef, timeInMilliseconds: Long) = emit(value)
+  def emitNow(value: AnyRef) = emit(value)
 }
 
 trait Emitter[This <: Emitter[This, A], A <: Absorber[A, This]] extends Emittable {
@@ -99,12 +101,18 @@ trait OneOffable extends Emittable {
   override def emit(value: AnyRef) { super.emit(value); if(oneOff) close() }
 }
 
-class Event(override val oneOff: Boolean) extends Handler with Emitter[Event, Handler]
-    with Attachable with OneOffable {
-  def this() = this(false)
+class IEvent(override val oneOff: Boolean) extends Emitter[IEvent, IHandler]
+  with Attachable with OneOffable {
   def handlers = absorbers
 }
 
-class Handler extends Absorber[Handler, Event] {
+trait IHandler extends Absorber[IHandler, IEvent] {
   def events = emitters
 }
+
+class Event(oneOff: Boolean) extends IEvent(oneOff) with IHandler {
+  def this() = this(false)
+}
+
+class Handler extends IHandler
+

@@ -6,7 +6,7 @@
 (defmacro ?handlers= [event coll] `(?= (seq (e/handlers ~event)) ~coll))
 (defmacro ?events= [handler coll] `(?= (seq (e/events ~handler)) ~coll))
 
-(defn- conj-action [actions e s] (swap! actions conj {:src s :emitter e}))
+(defn conj-action [actions e s] (swap! actions conj {:src s :emitter e}))
 
 (defmacro action-handler [atom event]
   `(e/handler ([e# s#] (conj-action ~atom e# s#)) ~event))
