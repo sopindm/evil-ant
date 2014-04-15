@@ -6,7 +6,7 @@
   :plugins [[io.tomw/lein-scalac "0.1.2"]]
   :profiles {:dev {:dependencies [[khazad-dum "0.2.0"]]
                    :repl-options {:init (use 'khazad-dum)}}}
-  :jvm-opts ["-server"]
+;  :jvm-opts ["-server"]
   :source-paths ["src/"]
   :prep-tasks ["scalac"]
   :scala-source-path "scala"

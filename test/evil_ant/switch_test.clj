@@ -64,9 +64,38 @@
     (e/emit-now! e 123)
     (?actions= a)))
 
+;switch without handlers disabled
+
+(deftest switch-sets
+  (let [es (repeatedly 10 #(e/switch))
+        a (atom [])
+        hs (doall (map #(action-handler a %) es))
+        s (apply e/switch-set es)]
+    (doall (map #(e/turn-on! %) (take 3 (drop 2 es))))
+    (e/emit! s 123)
+    (?= (set @a) (set (map (fn [x] {:emitter x :src 123}) (take 3 (drop 2 es)))))))
+    
+(deftest conjing-active-switch
+  (let [e (e/switch)
+        s (e/switch-set)
+        a (atom [])
+        h (action-handler a e)]
+    (e/turn-on! e)
+    (e/conj! s e)
+    (e/emit! s 123)
+    (?actions= a [e 123])))
+
+(deftest disjing-active-switch
+  (let [e (e/switch) s (e/switch-set e)
+        a (atom []) h (action-handler a e)]
+    (e/turn-on! e)
+    (e/disj! s e)
+    (e/emit! s 123)
+    (?actions= a)))
+
 ;switching with sets
-;;emit on set throws emit on turned on switches
 ;;emit on set without turned on switches blocks
+;;switches with attachment emit attachment
 ;;disabled switches affect selection
 ;;emit-in and emit-now
 

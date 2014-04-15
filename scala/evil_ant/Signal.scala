@@ -1,14 +1,22 @@
 package evil_ant
 
-class SwitchSignal(oneOff: Boolean) extends IEvent(oneOff) {
+class SwitchSignal(oneOff: Boolean) extends IEvent(oneOff) with Absorber[SwitchSignal, SwitchSet] {
   def this() = this(false)
 
   private val isOn = new java.util.concurrent.atomic.AtomicBoolean(false)
 
-  def turnOn() { this.synchronized { isOn.set(true); notify() }}
-  def turnOff() { this.synchronized { isOn.set(false); notify() }}
+  def turnOn() {
+    isOn.set(true)
+    emitters.foreach(_.activate(this))
+    this.synchronized { notify() }
+  }
+  def turnOff() {
+    isOn.set(false);
+    emitters.foreach(_.deactivate(this))
+    this.synchronized { notify() }
+  }
 
-  private def active = isOn.get
+  def active = isOn.get
   private def await() = wait
   private def awaitIn(milliseconds: Long) = if(milliseconds > 0) wait(milliseconds)
 
@@ -29,3 +37,17 @@ class SwitchSignal(oneOff: Boolean) extends IEvent(oneOff) {
     emitNow(obj)
   }
 }
+
+class SwitchSet extends Emitter[SwitchSet, SwitchSignal] {
+  private[this] val active = new Set[SwitchSignal]()
+
+  private[evil_ant] def activate(s: SwitchSignal) { active += s }
+  private[evil_ant] def deactivate(s: SwitchSignal) { active -= s }
+
+  override def +=(s: SwitchSignal) = { super.+=(s); if(s.active) activate(s); this }
+  override def -=(s: SwitchSignal) = { super.-=(s); if(s.active) deactivate(s); this }
+
+  override def emit(obj: AnyRef) = active.foreach(
+    a => { if(!a.active) deactivate(a) else a.emit(obj) })
+}
+
