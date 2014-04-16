@@ -24,12 +24,16 @@ class Set[T] extends scala.collection.mutable.Set[T] {
   override def -=(e: T) = this.synchronized { _set -= e; this }
   override def contains(e: T) = _set.contains(e)
   override def iterator = _set.iterator
+
+  override def isEmpty = _set.isEmpty
 }
 
 trait Emittable extends Closeable {
-  def emit(value: AnyRef) {}
-  def emitIn(value: AnyRef, timeInMilliseconds: Long) = emit(value)
-  def emitNow(value: AnyRef) = emit(value)
+  def emit(value: AnyRef) = doEmit(value)
+  def emitIn(value: AnyRef, timeInMilliseconds: Long) = doEmit(value)
+  def emitNow(value: AnyRef) = doEmit(value)
+
+  protected def doEmit(value: AnyRef) {}
 }
 
 trait Emitter[This <: Emitter[This, A], A <: Absorber[A, This]] extends Emittable {
@@ -54,7 +58,9 @@ trait Emitter[This <: Emitter[This, A], A <: Absorber[A, This]] extends Emittabl
   def conj(a: A) = +=(a)
   def disj(a: A) = -=(a)
 
-  override def emit(value: AnyRef) { requireOpen; absorbers.foreach(_.callAbsorb(this, value)) }
+  override protected def doEmit(value: AnyRef) { 
+    requireOpen;
+    absorbers.foreach(_.callAbsorb(this, value)) }
 
   override def close() { super.close; absorbers.foreach(this -= _) }
 }
@@ -93,12 +99,14 @@ trait Attachable extends Emittable {
   def attachment = _attachment
 
   override def close() { super.close(); _attachment = null }
-  override def emit(value: AnyRef) { super.emit(if(attachment != null) attachment else value) }
+  override protected def doEmit(value: AnyRef) {
+    super.doEmit(if(attachment != null) attachment else value) }
 }
 
 trait OneOffable extends Emittable {
   val oneOff: Boolean 
-  override def emit(value: AnyRef) { super.emit(value); if(oneOff) close() }
+  override protected def doEmit(value: AnyRef) {
+    super.doEmit(value); if(oneOff) close() }
 }
 
 class IEvent(override val oneOff: Boolean) extends Emitter[IEvent, IHandler]

@@ -93,11 +93,26 @@
     (e/emit! s 123)
     (?actions= a)))
 
-;switching with sets
-;;emit on set without turned on switches blocks
-;;switches with attachment emit attachment
-;;disabled switches affect selection
-;;emit-in and emit-now
+(deftest emitting-on-set-without-turned-on-switches-block
+  (let [es (repeatedly 5 #(e/switch))
+        s (apply e/switch-set es)
+        f (future (e/emit! s 123))]
+    (Thread/sleep 2)
+    (?false (realized? f))
+    (e/turn-on! (nth es 2))
+    (Thread/sleep 2)
+    (?true (realized? f))))
+
+(deftest disabled-switches-affect-selection
+  (let [a (atom [])
+        e (e/switch)
+        h (action-handler a e)
+        s (e/switch-set e)]
+    (e/disable! e)
+    (let [f (future (e/emit! s 123))]
+      (Thread/sleep 2)
+      (?false (realized? f))
+      (future-cancel f))))
 
 (comment
 (deftest simple-triggering

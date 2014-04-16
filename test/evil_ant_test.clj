@@ -197,13 +197,11 @@
     (.close e)
     (?= (e/attachment e) nil)))
 
-(comment
-;signals attachment (check attach and removing on close)
-
 ;;
 ;; Events multiset
 ;;
 
+(comment
 (defmacro with-events [[trigger [timer timeout] [reader writer] set] & body]
   `(let [~trigger (e/trigger)
          ~timer (e/timer ~timeout)
