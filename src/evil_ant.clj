@@ -1,6 +1,6 @@
 (ns evil-ant
   (:refer-clojure :exclude [conj! disj!])
-  (:import [evil_ant Event Handler SwitchSignal SwitchSet]))
+  (:import [evil_ant Event Handler SwitchSignal SwitchSet TimerSignal TimerSet]))
 
 ;;
 ;; Emitter/absorber functions
@@ -85,12 +85,14 @@
        (defn ~set-name ([] ~@set-body)
          ([& triggers#] (reduce conj! (~set-name) triggers#)))))
 
-(defn switch [] (SwitchSignal.))
+(defn switch ([] (SwitchSignal.))
+  ([attachment] (doto (switch) (attach! attachment))))
+
 (defn switch-set ([] (SwitchSet.))
   ([& signals] (reduce conj! (switch-set) signals)))
          
 (defn turn-on! [switch] (.turnOn switch))
 (defn turn-off! [switch] (.turnOff switch))
 
-
+(defn timer [milliseconds] (TimerSignal.))
 

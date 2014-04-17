@@ -1,9 +1,17 @@
-(ns evil-ant.switch-test
+(ns evil-ant.timer-test
   (:require [khazad-dum :refer :all]
             [evil-ant :as e]
             [evil-ant-test :refer :all])
   (import [evil_ant ClosedEmitterException]))
 
+(deftest zero-timing
+  (let [e (e/timer 0)
+        a (atom [])
+        h (action-handler a e)]
+    (e/emit-now! e 123)
+    (?actions= a [e 123])))
+
+(comment
 (deftest simple-switching
   (let [e (e/switch)
         actions (atom [])
@@ -11,8 +19,6 @@
     (e/turn-on! e)
     (e/emit! e 123)
     (?actions= actions [e 123])))
-
-(deftest making-switch-with-attachment (?= (e/attachment (e/switch 123)) 123))
 
 (deftest switching-for-turned-off-switch-blocks
   (let [e (e/switch)
@@ -122,6 +128,6 @@
     (?= (seq (e/emitters e)) nil)
     (?throws (e/emit! s 123) ClosedEmitterException)
     (?throws (e/emit-in! s 123 111) ClosedEmitterException)
-    (?throws (e/emit-now! s 123) ClosedEmitterException)))
+    (?throws (e/emit-now! s 123) ClosedEmitterException))))
 
 

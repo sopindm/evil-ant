@@ -24,38 +24,22 @@ trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends 
   override def emitNow(obj: AnyRef) = if(active) doEmit(obj)
 }
 
-abstract class Signal(oneOff: Boolean) extends IEvent(oneOff) with BlockingEmitter[IEvent, IHandler]
+abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[Set, This]](oneOff: Boolean)
+    extends IEvent(oneOff)
+    with BlockingEmitter[IEvent, IHandler]
+    with Absorber[This, Set] {
+  self: This =>
 
-class SwitchSignal(oneOff: Boolean) extends Signal(oneOff) with Absorber[SwitchSignal, SwitchSet] {
-  def this() = this(false)
+  protected def activate() = emitters.foreach(_.activate(this))
+  protected def deactivate() = emitters.foreach(_.deactivate(this))
 
-  private val isOn = new java.util.concurrent.atomic.AtomicBoolean(false)
+  override def active = isEnabled
 
-  def turnOn() {
-    isOn.set(true)
-    emitters.foreach(_.activate(this))
-    signal()
-  }
-
-  def turnOff() {
-    isOn.set(false);
-    emitters.foreach(_.deactivate(this))
-  }
-
-  override def enable() {
-    super.enable;
-    if(isOn.get) emitters.foreach(_.activate(this)) }
-
-  override def disable() {
-    super.disable;
-    if(isOn.get) emitters.foreach(_.deactivate(this)) }
-
-  override def active = isOn.get && isEnabled
-
-  override def absorb( e: SwitchSet, obj: AnyRef) = if(!active) turnOff() else emit(obj)
+  override def enable { super.enable; if(active) activate() }
+  override def disable { super.disable; if(active) deactivate() }
 }
 
-trait SignalSet[This <: SignalSet[This, T], T <: Signal with Absorber[T, This]]
+trait SignalSet[This <: SignalSet[This, T], T <: Signal[T, This] with Absorber[T, This]]
     extends BlockingEmitter[This, T] {
   self: This =>
 
@@ -66,6 +50,20 @@ trait SignalSet[This <: SignalSet[This, T], T <: Signal with Absorber[T, This]]
   override def -=(s: T) = { super.-=(s); if(s.active) deactivate(s); this }
 }
 
+class SwitchSignal(oneOff: Boolean) extends Signal[SwitchSignal, SwitchSet](oneOff)
+    with Absorber[SwitchSignal, SwitchSet] {
+  def this() = this(false)
+
+  private val isOn = new java.util.concurrent.atomic.AtomicBoolean(false)
+
+  def turnOn() { isOn.set(true); activate(); signal() }
+  def turnOff() { isOn.set(false); deactivate() }
+
+  override def active = super.active && isOn.get
+
+  override def absorb( e: SwitchSet, obj: AnyRef) = if(!active) turnOff() else doEmit(obj)
+}
+
 class SwitchSet extends SignalSet[SwitchSet, SwitchSignal] {
   private[this] val active = new Set[SwitchSignal]()
 
@@ -73,5 +71,16 @@ class SwitchSet extends SignalSet[SwitchSet, SwitchSignal] {
   private[evil_ant] override def deactivate(s: SwitchSignal) { active -= s }
 
   override def active() = !active.isEmpty || (active.isEmpty && absorbers.isEmpty)
+}
+
+class TimerSignal(oneOff: Boolean) extends Signal[TimerSignal, TimerSet](oneOff) {
+  def this() = this(false)
+}
+
+class TimerSet extends SignalSet[TimerSet, TimerSignal] {
+  override def active = true
+
+  private[evil_ant] def activate(s: TimerSignal) {}
+  private[evil_ant] def deactivate(s: TimerSignal) {}
 }
 
