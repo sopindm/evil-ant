@@ -59,6 +59,9 @@
 
 (defn- scala-set [set] (scala.collection.JavaConversions/asJavaSet set))
 
+(defn emitters [absorber] (scala-set (.emitters absorber)))
+(defn absorbers [emitter] (scala-set (.absorbers emitter)))
+
 (defn handlers [event] (scala-set (.handlers event)))
 (defn events [handler] (scala-set (.events handler)))
 
