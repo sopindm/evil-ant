@@ -29,8 +29,8 @@ class Set[T] extends scala.collection.mutable.Set[T] {
 }
 
 trait Emittable extends Closeable {
-  def emit(value: AnyRef) = doEmit(value)
-  def emitIn(value: AnyRef, timeInMilliseconds: Long) = doEmit(value)
+  def emit(value: AnyRef) = emitNow(value)
+  def emitIn(value: AnyRef, timeInMilliseconds: Long) = emitNow(value)
   def emitNow(value: AnyRef) = doEmit(value)
 
   protected def doEmit(value: AnyRef) {}
@@ -58,9 +58,8 @@ trait Emitter[This <: Emitter[This, A], A <: Absorber[A, This]] extends Emittabl
   def conj(a: A) = +=(a)
   def disj(a: A) = -=(a)
 
-  override protected def doEmit(value: AnyRef) { 
-    requireOpen;
-    absorbers.foreach(_.callAbsorb(this, value)) }
+  override def emitNow(value: AnyRef) = { requireOpen; doEmit(value ) }
+  override protected def doEmit(value: AnyRef) { absorbers.foreach(_.callAbsorb(this, value)) }
 
   override def close() { super.close; absorbers.foreach(this -= _) }
 }

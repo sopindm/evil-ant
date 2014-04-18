@@ -5,18 +5,22 @@
   (import [evil_ant ClosedEmitterException]))
 
 (deftest simple-switching
-  (let [e (e/switch)
-        actions (atom [])
-        h (action-handler actions e)]
+  (let [e (e/switch)]
     (e/turn-on! e)
-    (e/emit! e 123)
-    (?actions= actions [e 123])))
+    (?emit= e [e])))
 
-(deftest making-switch-with-attachment (?= (e/attachment (e/switch 123)) 123))
+(deftest making-switch-with-attachment
+  (?= (e/attachment (e/switch :attachment 123)) 123))
+
+(deftest one-off-switches
+  (let [e (e/switch :one-off true)]
+    (e/turn-on! e)
+    (?emit= e [e])
+    (?false (e/open? e))))
 
 (deftest switching-for-turned-off-switch-blocks
-  (let [e (e/switch)
-        a (atom [])
+  (let [a (atom [])
+        e (e/switch)
         h (action-handler a e)
         f (future (e/emit! e 123))]
     (Thread/sleep 2)
@@ -27,14 +31,10 @@
     (?actions= a [e 123])))
 
 (deftest emit-now-for-switches
-  (let [e (e/switch)
-        a (atom [])
-        h (action-handler a e)]
-    (e/emit-now! e 123)
-    (?= (seq @a) nil)
+  (let [e (e/switch)]
+    (?emit-now= e nil)
     (e/turn-on! e)
-    (e/emit-now! e 123)
-    (?actions= a [e 123])))
+    (?emit-now= e [e])))
 
 (deftest emit-in-for-switches
   (let [e (e/switch)
@@ -59,13 +59,10 @@
     (?= (e/attachment e) 123)))
 
 (deftest turning-switch-off
-  (let [e (e/switch)
-        a (atom [])
-        h (action-handler a e)]
+  (let [e (e/switch)]
     (e/turn-on! e)
     (e/turn-off! e)
-    (e/emit-now! e 123)
-    (?actions= a)))
+    (?emit-now= e nil)))
 
 (deftest switch-sets
   (let [es (repeatedly 10 #(e/switch))
@@ -123,5 +120,6 @@
     (?throws (e/emit! s 123) ClosedEmitterException)
     (?throws (e/emit-in! s 123 111) ClosedEmitterException)
     (?throws (e/emit-now! s 123) ClosedEmitterException)))
+
 
 

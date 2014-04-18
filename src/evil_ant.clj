@@ -86,7 +86,8 @@
          ([& triggers#] (reduce conj! (~set-name) triggers#)))))
 
 (defn switch ([] (SwitchSignal.))
-  ([attachment] (doto (switch) (attach! attachment))))
+  ([& {:keys [attachment one-off]}]
+     (doto (SwitchSignal. (boolean one-off)) (attach! attachment))))
 
 (defn switch-set ([] (SwitchSet.))
   ([& signals] (reduce conj! (switch-set) signals)))
@@ -94,5 +95,16 @@
 (defn turn-on! [switch] (.turnOn switch))
 (defn turn-off! [switch] (.turnOff switch))
 
-(defn timer [milliseconds] (TimerSignal.))
+(declare start!)
+(defn timer ([milliseconds] (doto (TimerSignal. milliseconds) start!))
+  ([milliseconds & {:keys [circular attachment one-off] :as options}]
+     (doto (TimerSignal. milliseconds (boolean circular) (boolean one-off))
+       start!
+       (attach! attachment))))
 
+(defn timeout [timer] (.timeout timer))
+(defn remaining [timer] (.remaining timer))
+
+(defn start! [timer] (.start timer))
+(defn stop! [timer] (.stop timer))
+(defn restart! [timer] (stop! timer) (start! timer))

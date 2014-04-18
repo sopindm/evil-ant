@@ -10,7 +10,7 @@ trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends 
 
   override def emit(obj: AnyRef) {
     this.synchronized { while(!active) await() }
-    doEmit(obj)
+    super.emit(obj)
   }
 
   override def emitIn(obj: AnyRef, milliseconds: Long) {
@@ -18,10 +18,10 @@ trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends 
     def remainingTime() = milliseconds - (System.currentTimeMillis() - startTime)
 
     this.synchronized { while(!active && remainingTime() > 0) await(remainingTime()) }
-    emitNow(obj)
+    super.emitIn(obj, milliseconds)
   }
 
-  override def emitNow(obj: AnyRef) = if(active) doEmit(obj)
+  override def emitNow(obj: AnyRef) = if(active) super.emitNow(obj)
 }
 
 abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[Set, This]](oneOff: Boolean)
@@ -71,10 +71,33 @@ class SwitchSet extends SignalSet[SwitchSet, SwitchSignal] {
   private[evil_ant] override def deactivate(s: SwitchSignal) { active -= s }
 
   override def active() = !active.isEmpty || (active.isEmpty && absorbers.isEmpty)
+
+  override def doEmit(obj: AnyRef) = active.foreach(_.callAbsorb(this, obj))
 }
 
-class TimerSignal(oneOff: Boolean) extends Signal[TimerSignal, TimerSet](oneOff) {
-  def this() = this(false)
+class TimerSignal(val timeout: Long, circular: Boolean, oneOff: Boolean)
+    extends Signal[TimerSignal, TimerSet](oneOff) {
+  def this(timeout: Long, circular: Boolean) = this(timeout, circular, false)
+  def this(timeout: Long) = this(timeout, false, false)
+
+  @volatile
+  private var started: Boolean = false
+
+  @volatile
+  private var finishTime: Long = 0
+  private def currentTime() = System.currentTimeMillis()
+
+  def remaining = finishTime - currentTime()
+
+  def start { finishTime = currentTime() + timeout; started = true }
+  def stop { finishTime = currentTime(); started = false; signal() }
+
+  override def await() = if(started) super.await(remaining)
+  override def await(time: Long) = if(started) super.await(scala.math.min(time, remaining))
+
+  override def active = !started || currentTime() >= finishTime
+
+  override def doEmit(obj: AnyRef) = if(started) { super.doEmit(obj); if(circular) start else stop }
 }
 
 class TimerSet extends SignalSet[TimerSet, TimerSignal] {

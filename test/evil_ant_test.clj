@@ -6,6 +6,17 @@
 (defmacro ?handlers= [event coll] `(?= (seq (e/handlers ~event)) ~coll))
 (defmacro ?events= [handler coll] `(?= (seq (e/events ~handler)) ~coll))
 
+(defmacro -?emit= [emitter value form]
+  `(let [actions# (atom [])]
+     (with-open [handler# (e/handler ([e# s#] (swap! actions# #(conj % e#))) ~emitter)]
+       ~form
+       (?= (seq @actions#) ~value))))
+
+(defmacro ?emit-now= [emitter value] `(-?emit= ~emitter ~value (e/emit-now! ~emitter (gensym))))
+(defmacro ?emit-in= [emitter time value]
+  `(-?emit= ~emitter ~value (e/emit-in! ~emitter (gensym) ~time)))
+(defmacro ?emit= [emitter value] `(-?emit= ~emitter ~value (e/emit! ~emitter (gensym))))
+
 (defn conj-action [actions e s] (swap! actions conj {:src s :emitter e}))
 
 (defmacro action-handler [atom event]
@@ -157,11 +168,8 @@
     (?action= actions [e 123])))
 
 (deftest one-shot-event
-  (let [actions (atom [])
-        e (e/event () :one-shot)
-        h (action-handler actions e)]
-    (e/emit! e 123)
-    (?action= actions [e 123])
+  (let [e (e/event () :one-shot)]
+    (?emit= e [e])
     (?false (e/open? e))
     (?handlers= e nil)))
 
