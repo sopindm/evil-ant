@@ -16,18 +16,6 @@ class ClosedAbsorberException(msg: String) extends RuntimeException(msg) {
   def this() = this("")
 }
 
-class Set[T] extends scala.collection.mutable.Set[T] {
-  @volatile
-  private [this] var _set = scala.collection.immutable.Set[T]()
-
-  override def +=(e: T) = this.synchronized { _set += e; this }
-  override def -=(e: T) = this.synchronized { _set -= e; this }
-  override def contains(e: T) = _set.contains(e)
-  override def iterator = _set.iterator
-
-  override def isEmpty = _set.isEmpty
-}
-
 trait Emittable extends Closeable {
   def emit(value: AnyRef) = emitNow(value)
   def emitIn(value: AnyRef, timeInMilliseconds: Long) = emitNow(value)
@@ -40,8 +28,8 @@ trait Emitter[This <: Emitter[This, A], A <: Absorber[A, This]] extends Emittabl
   self: This =>
 
   @volatile
-  private var _absorbers = new Set[A]()
-  private def absorbers_=(v: Set[A]) { _absorbers = v }
+  private var _absorbers = new AtomicSet[A]()
+  private def absorbers_=(v: AtomicSet[A]) { _absorbers = v }
   def absorbers = _absorbers
 
   def +=(a: A): This = { a.pushEmitter(this); pushAbsorber(a); this }
@@ -66,8 +54,8 @@ trait Emitter[This <: Emitter[This, A], A <: Absorber[A, This]] extends Emittabl
 
 trait Absorber[This <: Absorber[This, E], E <: Emitter[E, This]] extends Closeable { self: This =>
   @volatile
-  private var _emitters = new Set[E]()
-  private def emitter_=(v: Set[E]) { _emitters = v }
+  private var _emitters = new AtomicSet[E]()
+  private def emitter_=(v: AtomicSet[E]) { _emitters = v }
   def emitters = _emitters
 
   private[this] def requireOpen { if(!isOpen) throw new ClosedAbsorberException() }

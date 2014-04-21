@@ -2,7 +2,7 @@
   (:require [khazad-dum :refer :all]
             [evil-ant :as e]
             [evil-ant-test :refer :all])
-  (import [evil_ant ClosedEmitterException]))
+  (:import [evil_ant ClosedEmitterException]))
 
 (deftest zero-timing
   (let [e (e/timer 0)]
@@ -48,14 +48,14 @@
     (e/stop! e)
     (?= (e/remaining e) 0)
     (e/start! e)
-    (?= (e/remaining e) 100)))
+    (?true (>= (e/remaining e) 98))))
 
 (deftest restarting-timer
   (let [e (e/timer 100)]
     (Thread/sleep 5)
     (?true (<= (e/remaining e) 95))
     (e/restart! e)
-    (?= (e/remaining e) 100)))
+    (?true (>= (e/remaining e) 97))))
 
 (deftest circular-timers
   (let [e (e/timer 0 :circular true)]
@@ -71,62 +71,29 @@
     (?emit= e [e])
     (?false (e/open? e))))
 
-;timer sets
-
-(comment
-(deftest switch-sets
-  (let [es (repeatedly 10 #(e/switch))
-        a (atom [])
-        hs (doall (map #(action-handler a %) es))
-        s (apply e/switch-set es)]
-    (doall (map #(e/turn-on! %) (take 3 (drop 2 es))))
-    (e/emit! s 123)
-    (?= (set @a) (set (map (fn [x] {:emitter x :src 123}) (take 3 (drop 2 es)))))))
-    
-(deftest conjing-active-switch
-  (let [e (e/switch)
-        s (e/switch-set)
-        a (atom [])
-        h (action-handler a e)]
-    (e/turn-on! e)
-    (e/conj! s e)
-    (e/emit! s 123)
-    (?actions= a [e 123])))
-
-(deftest disjing-active-switch
-  (let [e (e/switch) s (e/switch-set e)
-        a (atom []) h (action-handler a e)]
-    (e/turn-on! e)
-    (e/disj! s e)
-    (e/emit! s 123)
-    (?actions= a)))
-
-(deftest emitting-on-set-without-turned-on-switches-block
-  (let [es (repeatedly 5 #(e/switch))
-        s (apply e/switch-set es)
-        f (future (e/emit! s 123))]
-    (Thread/sleep 2)
-    (?false (realized? f))
-    (e/turn-on! (nth es 2))
-    (Thread/sleep 2)
-    (?true (realized? f))))
-
-(deftest disabled-switches-affect-selection
+(deftest timer-sets
   (let [a (atom [])
-        e (e/switch)
-        h (action-handler a e)
-        s (e/switch-set e)]
-    (e/disable! e)
-    (let [f (future (e/emit! s 123))]
-      (Thread/sleep 2)
-      (?false (realized? f))
-      (future-cancel f))))
+        timers [(e/timer 0) (e/timer 3) (e/timer 6)]
+        s (apply e/timer-set timers)]
+    (doseq [t timers] (action-handler a t))
+    (e/emit-now! s 123)
+    (?actions= a [(first timers) 123])
+    (reset! a [])
+    (e/emit-in! s 234 1000)
+    (?actions= a [(second timers) 234])
+    (reset! a [])
+    (e/emit-in! s 345 1000)
+    (?action= a [(nth timers 2) 345])))
 
-(deftest closing-switch-set
-  (let [e (e/switch)
-        s (e/switch-set e)]
-    (.close s)
-    (?= (seq (e/emitters e)) nil)
-    (?throws (e/emit! s 123) ClosedEmitterException)
-    (?throws (e/emit-in! s 123 111) ClosedEmitterException)
-    (?throws (e/emit-now! s 123) ClosedEmitterException)))
+(deftest starting-timer-after-set-emit
+  (let [a (atom [])
+        timer (e/timer 0)
+        s (e/timer-set)
+        h (action-handler a timer)
+        f (future (e/emit! s 123))]
+    (Thread/sleep 1)
+    (?false (realized? f))
+    (e/conj! s timer)
+    (Thread/sleep 1)
+    (?true (realized? f))
+    (?actions= a [timer 123])))

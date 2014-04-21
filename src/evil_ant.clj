@@ -101,6 +101,8 @@
      (doto (TimerSignal. milliseconds (boolean circular) (boolean one-off))
        start!
        (attach! attachment))))
+(defn timer-set ([] (TimerSet.))
+  ([& timers] (reduce conj! (timer-set) timers)))
 
 (defn timeout [timer] (.timeout timer))
 (defn remaining [timer] (.remaining timer))

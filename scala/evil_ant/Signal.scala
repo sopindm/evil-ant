@@ -1,7 +1,8 @@
 package evil_ant
+import scala.annotation.tailrec
 
 trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends Emitter[This, T] { self: This =>
-  def active: Boolean
+  def ready: Boolean
 
   protected def signal() { this.synchronized { notify() } }
 
@@ -9,7 +10,7 @@ trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends 
   def await(milliseconds: Long) = if(milliseconds > 0) wait(milliseconds)
 
   override def emit(obj: AnyRef) {
-    this.synchronized { while(!active) await() }
+    this.synchronized { while(!ready) await() }
     super.emit(obj)
   }
 
@@ -17,11 +18,11 @@ trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends 
     val startTime = System.currentTimeMillis
     def remainingTime() = milliseconds - (System.currentTimeMillis() - startTime)
 
-    this.synchronized { while(!active && remainingTime() > 0) await(remainingTime()) }
+    this.synchronized { while(!ready && remainingTime() > 0) await(remainingTime()) }
     super.emitIn(obj, milliseconds)
   }
 
-  override def emitNow(obj: AnyRef) = if(active) super.emitNow(obj)
+  override def emitNow(obj: AnyRef) = if(ready) super.emitNow(obj)
 }
 
 abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[Set, This]](oneOff: Boolean)
@@ -33,10 +34,13 @@ abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[Set, This]](on
   protected def activate() = emitters.foreach(_.activate(this))
   protected def deactivate() = emitters.foreach(_.deactivate(this))
 
-  override def active = isEnabled
+  def active = isEnabled
+  override def ready = isEnabled
 
   override def enable { super.enable; if(active) activate() }
   override def disable { super.disable; if(active) deactivate() }
+
+  override def absorb(e: Set, obj: AnyRef) = emitNow(obj)
 }
 
 trait SignalSet[This <: SignalSet[This, T], T <: Signal[T, This] with Absorber[T, This]]
@@ -59,18 +63,19 @@ class SwitchSignal(oneOff: Boolean) extends Signal[SwitchSignal, SwitchSet](oneO
   def turnOn() { isOn.set(true); activate(); signal() }
   def turnOff() { isOn.set(false); deactivate() }
 
-  override def active = super.active && isOn.get
+  override def ready = super.ready && isOn.get
+  override def active = ready
 
-  override def absorb( e: SwitchSet, obj: AnyRef) = if(!active) turnOff() else doEmit(obj)
+  override def absorb( e: SwitchSet, obj: AnyRef) = if(!active) turnOff() else emitNow(obj)
 }
 
 class SwitchSet extends SignalSet[SwitchSet, SwitchSignal] {
-  private[this] val active = new Set[SwitchSignal]()
+  private[this] val active = new AtomicSet[SwitchSignal]
 
   private[evil_ant] override def activate(s: SwitchSignal) { active += s; signal() }
   private[evil_ant] override def deactivate(s: SwitchSignal) { active -= s }
 
-  override def active() = !active.isEmpty || (active.isEmpty && absorbers.isEmpty)
+  override def ready = !active.isEmpty || (active.isEmpty && absorbers.isEmpty)
 
   override def doEmit(obj: AnyRef) = active.foreach(_.callAbsorb(this, obj))
 }
@@ -84,26 +89,70 @@ class TimerSignal(val timeout: Long, circular: Boolean, oneOff: Boolean)
   private var started: Boolean = false
 
   @volatile
-  private var finishTime: Long = 0
+  private var _finishTime: Long = 0
+  def finishTime = _finishTime
+
   private def currentTime() = System.currentTimeMillis()
 
   def remaining = finishTime - currentTime()
 
-  def start { finishTime = currentTime() + timeout; started = true }
-  def stop { finishTime = currentTime(); started = false; signal() }
+  def start { _finishTime = currentTime() + timeout; started = true; activate() }
+  def stop { deactivate(); _finishTime = currentTime(); started = false; signal() }
 
-  override def await() = if(started) super.await(remaining)
-  override def await(time: Long) = if(started) super.await(scala.math.min(time, remaining))
+  override def await() = if(active) super.await(remaining)
+  override def await(time: Long) = if(active) super.await(scala.math.min(time, remaining))
 
-  override def active = !started || currentTime() >= finishTime
+  override def active = started
+  override def ready = !active || currentTime() >= finishTime
 
-  override def doEmit(obj: AnyRef) = if(started) { super.doEmit(obj); if(circular) start else stop }
+  override def doEmit(obj: AnyRef) = if(ready && active) { super.doEmit(obj); if(circular) start else stop }
 }
 
-class TimerSet extends SignalSet[TimerSet, TimerSignal] {
-  override def active = true
+final class TimerSet extends SignalSet[TimerSet, TimerSignal] {
+  val timeouts = new AtomicMap[Long, Set[TimerSignal]]
+  def timeout =
+    if(!timeouts.isEmpty)
+      timeouts.head._1 - System.currentTimeMillis()
+    else 0
 
-  private[evil_ant] def activate(s: TimerSignal) {}
-  private[evil_ant] def deactivate(s: TimerSignal) {}
+  override def await() =
+    if(timeouts.isEmpty) super.await()
+    else super.await(timeout)
+
+  override def await(millis: Long) =
+    if(timeouts.isEmpty) super.await(millis)
+    else super.await(scala.math.min(millis, timeout))
+
+  override def ready = !timeouts.isEmpty && (timeout <= 0)
+
+  private[evil_ant] override def activate(s: TimerSignal) {
+    val finishTime = s.finishTime
+    timeouts.update(ts => ts.get(finishTime) match {
+      case Some(signals) => ts + (finishTime -> (signals + s))
+      case None => ts + (finishTime -> Set[TimerSignal](s))
+    })
+    signal()
+  }
+
+  private[evil_ant] override def deactivate(s: TimerSignal) {
+    val finishTime = s.finishTime
+    timeouts.update(ts => ts.get(finishTime) match {
+      case Some(signals) => { 
+        val updatesSignals = signals - s
+        if(updatesSignals.isEmpty) ts - finishTime else ts + (finishTime -> updatesSignals)}
+      case None => ts
+    })
+  }
+
+  @tailrec
+  override final def doEmit(obj: AnyRef) =
+    if(ready) {
+      val head = timeouts.updateAndGet(ts => (ts.tail, ts.head))
+      if(head._1 <= System.currentTimeMillis()) {
+        head._2.foreach(_.callAbsorb(this, obj))
+        doEmit(obj)
+      }
+      else
+        head._2.foreach(activate(_))
+    }
 }
-
