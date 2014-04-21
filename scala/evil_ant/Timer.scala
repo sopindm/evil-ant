@@ -1,4 +1,5 @@
 package evil_ant
+import scala.annotation.tailrec
 
 final class TimerSignal(val timeout: Long, circular: Boolean, oneOff: Boolean)
     extends Signal[TimerSignal, TimerSet](oneOff) {

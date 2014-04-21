@@ -1,5 +1,4 @@
 package evil_ant
-import scala.annotation.tailrec
 
 trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends Emitter[This, T] { self: This =>
   def ready: Boolean
