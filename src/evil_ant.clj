@@ -1,6 +1,9 @@
 (ns evil-ant
   (:refer-clojure :exclude [conj! disj!])
-  (:import [evil_ant Event Handler SwitchSignal SwitchSet TimerSignal TimerSet]))
+  (:import [evil_ant Event Handler
+                     SwitchSignal SwitchSet
+                     TimerSignal TimerSet
+                     SelectorSignal SelectorSet]))
 
 ;;
 ;; Emitter/absorber functions
@@ -110,3 +113,14 @@
 (defn start! [timer] (.start timer))
 (defn stop! [timer] (.stop timer))
 (defn restart! [timer] (stop! timer) (start! timer))
+
+(defn selector [channel operation]
+  (letfn [(check-option [name type]
+            (when (and (= operation name) (not (instance? type channel)))
+              (throw (IllegalArgumentException.))))]
+    (check-option :write java.nio.channels.WritableByteChannel)
+    (check-option :read java.nio.channels.ReadableByteChannel)
+    (check-option :accept java.nio.channels.ServerSocketChannel)
+    (check-option :connect java.nio.channels.SocketChannel)
+    (SelectorSignal. channel)))
+  

@@ -3,7 +3,7 @@ package evil_ant
 trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends Emitter[This, T] { self: This =>
   def ready: Boolean
 
-  protected def signal() { this.synchronized { notify() } }
+  def signal() { this.synchronized { notify() } }
 
   def await() = wait()
   def await(milliseconds: Long) = if(milliseconds > 0) wait(milliseconds)

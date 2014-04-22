@@ -1,7 +1,6 @@
 package evil_ant
 
-final class SwitchSignal(oneOff: Boolean) extends Signal[SwitchSignal, SwitchSet](oneOff)
-    with Absorber[SwitchSignal, SwitchSet] {
+final class SwitchSignal(oneOff: Boolean) extends Signal[SwitchSignal, SwitchSet](oneOff) {
   def this() = this(false)
 
   private val isOn = new java.util.concurrent.atomic.AtomicBoolean(false)
