@@ -1,58 +1,49 @@
 package evil_ant
 
-trait Closeable extends java.io.Closeable {
-  @volatile
-  private[this] var _isOpen = true
+trait Emitter[T] extends Closeable {
+  protected def requireOpen = if(!isOpen) throw new ClosedEmitterException()
 
-  def isOpen = _isOpen
-  def close() { _isOpen = false }
-}
-
-class ClosedEmitterException(msg: String) extends RuntimeException(msg) {
-  def this() = this("")
-}
-
-class ClosedAbsorberException(msg: String) extends RuntimeException(msg) {
-  def this() = this("")
-}
-
-trait Emittable extends Closeable {
   def emit(value: AnyRef) = emitNow(value)
   def emitIn(value: AnyRef, timeInMilliseconds: Long) = emitNow(value)
-  def emitNow(value: AnyRef) = doEmit(value)
+  def emitNow(value: AnyRef) = { requireOpen; doEmit(value) }
 
-  protected def doEmit(value: AnyRef) {}
+  protected def doEmit(value: AnyRef)
+
+  def absorbers: Iterable[T]
+
+  override def close() { super.close(); absorbers.foreach(this -= _) }
+
+  def +=(absorber: T): Emitter[T]
+  def -=(absorber: T): Emitter[T]
+
+  final def conj(absorber: T) = +=(absorber)
+  final def disj(absorber: T) = -=(absorber)
 }
 
-trait Emitter[This <: Emitter[This, A], A <: Absorber[A, This]] extends Emittable {
+trait EmitterLike[This <: EmitterLike[This, A], A <: Absorber[A, This]] extends Emitter[A]
+    with CloseableLike {
   self: This =>
-
   @volatile
   private var _absorbers = new AtomicSet[A]()
   private def absorbers_=(v: AtomicSet[A]) { _absorbers = v }
-  def absorbers = _absorbers
+  override def absorbers = _absorbers
 
-  def +=(a: A): This = { a.pushEmitter(this); pushAbsorber(a); this }
-  def -=(a: A): This = { a.popEmitter(this); popAbsorber(a); this }
+  override protected def doEmit(value: AnyRef) { absorbers.foreach(_.callAbsorb(this, value)) }
 
-  private[this] def requireOpen { if(!isOpen) throw new ClosedEmitterException() }
+  override def +=(a: A): This = { a.pushEmitter(this); pushAbsorber(a); this }
+  override def -=(a: A): This = { a.popEmitter(this); popAbsorber(a); this }
+
   private[this] def pushAbsorber(a: A) {
     requireOpen
     absorbers += a
     if(!isOpen) absorbers -= a
   }
   private[this] def popAbsorber(a: A) { absorbers -= a }
-
-  def conj(a: A) = +=(a)
-  def disj(a: A) = -=(a)
-
-  override def emitNow(value: AnyRef) = { requireOpen; doEmit(value ) }
-  override protected def doEmit(value: AnyRef) { absorbers.foreach(_.callAbsorb(this, value)) }
-
-  override def close() { super.close; absorbers.foreach(this -= _) }
 }
 
-trait Absorber[This <: Absorber[This, E], E <: Emitter[E, This]] extends Closeable { self: This =>
+trait Absorber[This <: Absorber[This, E], E <: Emitter[This]] extends CloseableLike {
+  self: This =>
+
   @volatile
   private var _emitters = new AtomicSet[E]()
   private def emitter_=(v: AtomicSet[E]) { _emitters = v }
@@ -78,7 +69,9 @@ trait Absorber[This <: Absorber[This, E], E <: Emitter[E, This]] extends Closeab
   protected def absorb(e: E, value: AnyRef) {}
 }
 
-trait Attachable extends Emittable {
+class IEvent(val oneOff: Boolean) extends EmitterLike[IEvent, IHandler] {
+  def handlers = absorbers
+
   @volatile
   private var _attachment:AnyRef = null
 
@@ -87,18 +80,7 @@ trait Attachable extends Emittable {
 
   override def close() { super.close(); _attachment = null }
   override protected def doEmit(value: AnyRef) {
-    super.doEmit(if(attachment != null) attachment else value) }
-}
-
-trait OneOffable extends Emittable {
-  val oneOff: Boolean 
-  override protected def doEmit(value: AnyRef) {
-    super.doEmit(value); if(oneOff) close() }
-}
-
-class IEvent(override val oneOff: Boolean) extends Emitter[IEvent, IHandler]
-  with Attachable with OneOffable {
-  def handlers = absorbers
+    super.doEmit(if(attachment != null) attachment else value); if(oneOff) close() }
 }
 
 trait IHandler extends Absorber[IHandler, IEvent] {

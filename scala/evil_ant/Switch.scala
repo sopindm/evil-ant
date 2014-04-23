@@ -14,7 +14,7 @@ final class SwitchSignal(oneOff: Boolean) extends Signal[SwitchSignal, SwitchSet
   override def absorb( e: SwitchSet, obj: AnyRef) = if(!active) turnOff() else emitNow(obj)
 }
 
-final class SwitchSet extends SignalSet[SwitchSet, SwitchSignal] {
+final class SwitchSet extends SignalSetLike[SwitchSet, SwitchSignal] {
   private[this] val active = new AtomicSet[SwitchSignal]
 
   private[evil_ant] override def activate(s: SwitchSignal) { active += s; signal() }

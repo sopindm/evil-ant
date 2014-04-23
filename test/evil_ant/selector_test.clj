@@ -4,7 +4,10 @@
             [evil-ant-test :refer :all]))
 
 (defn pipe []
-  (let [pipe (java.nio.channels.Pipe/open)] [(.source pipe) (.sink pipe)]))
+  (let [pipe (java.nio.channels.Pipe/open)]
+    (.configureBlocking (.source pipe) false)
+    (.configureBlocking (.sink pipe) false)
+    [(.source pipe) (.sink pipe)]))
   
 (defmacro with-pipe [[source sink] & body]
   `(let [[~source ~sink] (pipe)] (with-open [~source ~source ~sink ~sink] ~@body)))
@@ -28,9 +31,29 @@
               s (e/selector connector :connect)]
     (?throws (e/selector connector :accept) IllegalArgumentException)))
 
+(deftest simple-selector-sets
+  (with-pipe [source sink]
+    (let [actions (atom [])]
+      (with-open [rdr (e/selector source :read)
+                  wrt (e/selector sink :write)
+                  s (e/selector-set rdr wrt)
+                  e1 (action-handler actions rdr)
+                  e2 (action-handler actions wrt)]
+        (?= (set (e/absorbers s)) #{rdr wrt})
+        (?= (seq (e/emitters rdr)) [s])
+        (?= (seq (e/emitters wrt)) [s])
+        (e/emit! s 123)
+        (?actions= actions [wrt 123])
+        (.write sink (java.nio.ByteBuffer/wrap
+                      (byte-array (map byte (range 5)))))
+        (reset! actions [])
+        (e/emit! s 234)
+        (?= (set @actions) #{{:emitter rdr :src 234}
+                             {:emitter wrt :src 234}})))))
+
+;disabling and enabling events
+
 ;selector sets
-;;making selector set
-;;simple selection
 ;;selection with timeout
 ;;selecting now
 

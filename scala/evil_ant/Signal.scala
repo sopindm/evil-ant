@@ -1,6 +1,6 @@
 package evil_ant
 
-trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends Emitter[This, T] { self: This =>
+trait BlockingEmitter[T] extends Emitter[T] {
   def ready: Boolean
 
   def signal() { this.synchronized { notify() } }
@@ -24,9 +24,9 @@ trait BlockingEmitter[This <: Emitter[This, T], T <: Absorber[T, This]] extends 
   override def emitNow(obj: AnyRef) = if(ready) super.emitNow(obj)
 }
 
-abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[Set, This]](oneOff: Boolean)
+abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[This]](oneOff: Boolean)
     extends IEvent(oneOff)
-    with BlockingEmitter[IEvent, IHandler]
+    with BlockingEmitter[IHandler] with EmitterLike[IEvent, IHandler]
     with Absorber[This, Set] {
   self: This =>
 
@@ -42,12 +42,14 @@ abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[Set, This]](on
   override def absorb(e: Set, obj: AnyRef) = emitNow(obj)
 }
 
-trait SignalSet[This <: SignalSet[This, T], T <: Signal[T, This] with Absorber[T, This]]
-    extends BlockingEmitter[This, T] {
-  self: This =>
-
+abstract class SignalSet[T] extends BlockingEmitter[T] {
   private[evil_ant] def activate(s: T)
   private[evil_ant] def deactivate(s: T)
+}
+
+abstract class SignalSetLike[This <: SignalSetLike[This, T], T <: Signal[T, This]]
+    extends SignalSet[T] with EmitterLike[This, T] {
+  self: This =>
 
   override def +=(s: T) = { super.+=(s); if(s.active) activate(s); this }
   override def -=(s: T) = { super.-=(s); if(s.active) deactivate(s); this }

@@ -1,9 +1,10 @@
 (ns evil-ant
   (:refer-clojure :exclude [conj! disj!])
-  (:import [evil_ant Event Handler
+  (:import [evil_ant Event Handler 
                      SwitchSignal SwitchSet
                      TimerSignal TimerSet
-                     SelectorSignal SelectorSet]))
+                     SelectorSignal SelectorSet]
+           [java.nio.channels SelectionKey]))
 
 ;;
 ;; Emitter/absorber functions
@@ -60,13 +61,13 @@
      `(handler- Event [~(boolean (some #{:one-shot} events))] 
                 ([~emitter ~source] ~@handler) #'setup-event- ~@events)))
 
-(defn- scala-set [set] (scala.collection.JavaConversions/asJavaSet set))
+(defn- scala-collection [coll] (scala.collection.JavaConversions/asJavaCollection coll))
 
-(defn emitters [absorber] (scala-set (.emitters absorber)))
-(defn absorbers [emitter] (scala-set (.absorbers emitter)))
+(defn emitters [absorber] (scala-collection (.emitters absorber)))
+(defn absorbers [emitter] (scala-collection (.absorbers emitter)))
 
-(defn handlers [event] (scala-set (.handlers event)))
-(defn events [handler] (scala-set (.events handler)))
+(defn handlers [event] (scala-collection (.handlers event)))
+(defn events [handler] (scala-collection (.events handler)))
 
 (defn when-any ([] (proxy [Event] [] (absorb [e s] (.emit this s))))
   ([& events] (apply absorber-conj (when-any) events)))
@@ -114,6 +115,13 @@
 (defn stop! [timer] (.stop timer))
 (defn restart! [timer] (stop! timer) (start! timer))
 
+(defn- scala-operation [operation]
+  (case operation
+    :read SelectionKey/OP_READ
+    :write SelectionKey/OP_WRITE
+    :accept SelectionKey/OP_ACCEPT
+    :connect SelectionKey/OP_CONNECT))
+
 (defn selector [channel operation]
   (letfn [(check-option [name type]
             (when (and (= operation name) (not (instance? type channel)))
@@ -122,5 +130,7 @@
     (check-option :read java.nio.channels.ReadableByteChannel)
     (check-option :accept java.nio.channels.ServerSocketChannel)
     (check-option :connect java.nio.channels.SocketChannel)
-    (SelectorSignal. channel)))
-  
+    (SelectorSignal. channel (scala-operation operation))))
+
+(defn selector-set ([] (SelectorSet.))
+  ([& selectors] (reduce conj! (selector-set) selectors)))

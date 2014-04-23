@@ -32,7 +32,7 @@ final class TimerSignal(val timeout: Long, circular: Boolean, oneOff: Boolean)
   }
 }
 
-final class TimerSet extends SignalSet[TimerSet, TimerSignal] {
+final class TimerSet extends SignalSetLike[TimerSet, TimerSignal] {
   val timeouts = new AtomicMap[Long, Set[TimerSignal]]
   def timeout =
     if(!timeouts.isEmpty)
