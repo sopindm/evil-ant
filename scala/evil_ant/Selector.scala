@@ -10,7 +10,11 @@ final class SelectorSignal(channel: SelectableChannel, operation: Integer, oneOf
 
   override def absorb( e: SelectorSet, obj: AnyRef) = doEmit(obj)
 
-  private[evil_ant] def register(selector: Selector) = channel.register(selector, operation, this)
+  private[evil_ant] def register(selector: Selector) = {
+    val key = channel.register(selector, operation, this)
+    if(!isEnabled) key.interestOps(0)
+  }
+
   private[evil_ant] def cancel(selector: Selector) = { 
     val key = channel.keyFor(selector)
     if(key != null) key.cancel()
@@ -26,8 +30,14 @@ final class SelectorSignal(channel: SelectableChannel, operation: Integer, oneOf
   }
 }
 
-final class SelectorSet extends SignalSet[SelectorSignal] {
-  override def close() { selector.close() }
+final class SelectorSet extends SignalSet[SelectorSignal] with CloseableLike{
+  override def close() {
+    if(!isOpen) return
+    super.close()
+    absorbers.foreach(_.popEmitter(this))
+    selector.close()
+  }
+
   override def isOpen = selector.isOpen
 
   private[this] val selector = Selector.open()
@@ -37,7 +47,7 @@ final class SelectorSet extends SignalSet[SelectorSignal] {
 
   override def absorbers = selector.keys.view.map(_.attachment.asInstanceOf[SelectorSignal])
 
-  override def +=(s: SelectorSignal) = { s.register(selector); s.pushEmitter(this); this }
+  override def +=(s: SelectorSignal) = { requireOpen; s.register(selector); s.pushEmitter(this); this }
   override def -=(s: SelectorSignal) = { s.cancel(selector); s.popEmitter(this); this }
 
   override def ready = !selector.selectedKeys().isEmpty

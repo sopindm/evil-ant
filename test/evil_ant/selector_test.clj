@@ -51,12 +51,39 @@
         (?= (set @actions) #{{:emitter rdr :src 234}
                              {:emitter wrt :src 234}})))))
 
-;disabling and enabling events
+(deftest disabling-selectors
+  (with-pipe [source sink]
+    (let [actions (atom [])]
+      (with-open [rdr (e/selector source :read)
+                  wrt (e/selector sink :write)
+                  s (e/selector-set rdr wrt)
+                  e1 (action-handler actions rdr)
+                  e2 (action-handler actions wrt)]
+        (.write sink (java.nio.ByteBuffer/wrap (byte-array (map byte (range 5)))))
+        (e/disable! wrt)
+        (e/emit! s 123)
+        (?actions= actions [rdr 123])
+        (e/disable! rdr)
+        (e/emit-now! s 234)
+        (?actions= actions [rdr 123])
+        (e/enable! wrt)
+        (e/emit! s 345)
+        (?actions= actions [rdr 123] [wrt 345])))))
+
+(deftest selecting-with-timeout
+  (with-pipe [source sink]
+    (with-open [rdr (e/selector source :read)
+                s (e/selector-set rdr)]
+      (e/emit-in! s 123 3))))
+
+(deftest closing-selection-set
+  (with-pipe [source sink]
+    (with-open [rdr (e/selector source :read)
+                s (e/selector-set rdr)]
+      (.close s)
+      (?= (seq (e/emitters rdr)) nil))))
 
 ;selector sets
-;;selection with timeout
-;;selecting now
-
 ;;selectors are emittable (through temp set)
 
 (comment
@@ -94,15 +121,6 @@
     (Thread/sleep 2)
     (?false (realized? f))
     (Thread/sleep 4)
-    (?true (realized? f))))
-
-(deftest interrupting-selector
-  (let [s (e/selector-set)
-        f (future (e/select s))]
-    (Thread/sleep 2)
-    (?false (realized? f))
-    (.interrupt s)
-    (Thread/sleep 1)
     (?true (realized? f))))
 
 (deftest canceling-selector-event
@@ -166,38 +184,4 @@
     (?= (seq @actions) [{:emit e :src 123}])
     (.handle e 456)
     (?= (seq @actions) [{:emit e :src 123} {:emit e :src 456}])))
-
-(deftest disj-for-selectors
-  (let [e (e/selector (first (pipe-)) :read)
-        s (e/selector-set e)]
-    (e/disj! s e)
-    (e/select s :timeout 0)
-    (?= (.provider e) nil)
-    (?= (seq (e/signals s)) nil)))
-
-(deftest accept-event
-  (let [accept-ch (java.nio.channels.ServerSocketChannel/open)]
-    (e/selector accept-ch :accept)
-    (?throws (e/selector accept-ch :read) IllegalArgumentException)
-    (?throws (e/selector accept-ch :write) IllegalArgumentException)
-    (?throws (e/selector accept-ch :connect) IllegalArgumentException))
-  (let [[reader writer] (pipe-)]
-    (?throws (e/selector reader :accept) IllegalArgumentException)
-    (?throws (e/selector reader :connect) IllegalArgumentException)
-    (?throws (e/selector writer :accept) IllegalArgumentException)
-    (?throws (e/selector writer :connect) IllegalArgumentException))
-  (let [connect-ch (java.nio.channels.SocketChannel/open)]
-    (e/selector connect-ch :connect)
-    (e/selector connect-ch :read)
-    (e/selector connect-ch :write)
-    (?throws (e/selector connect-ch :accept) IllegalArgumentException)))
-
-(deftest making-no-persistent-selector
-  (let [e (e/selector (second (pipe-)) :write)
-        s (e/selector-set e)]
-    (e/set-persistent! e false)
-    (?false (e/persistent? e))
-    (e/start! e)
-    (?= (e/for-selections [e s] (.handle e) e) [e])
-    (?= (seq (e/select s :timeout 0)) nil))))
-
+)
