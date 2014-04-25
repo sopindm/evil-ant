@@ -34,20 +34,22 @@ final class TimerSignal(val timeout: Long, circular: Boolean, oneOff: Boolean)
 
 final class TimerSet extends SignalSetLike[TimerSet, TimerSignal] {
   val timeouts = new AtomicMap[Long, Set[TimerSignal]]
-  def timeout =
-    if(!timeouts.isEmpty)
-      timeouts.head._1 - System.currentTimeMillis()
-    else 0
+  def timeout = if(!timeouts.isEmpty)
+    Some[Long](timeouts.head._1 - System.currentTimeMillis())
+  else 
+    None
 
-  override def await() =
-    if(timeouts.isEmpty) super.await()
-    else super.await(timeout)
+  override def await() = timeout match {
+    case Some(time) => super.await(time)
+    case None => super.await()
+  }
 
-  override def await(millis: Long) =
-    if(timeouts.isEmpty) super.await(millis)
-    else super.await(scala.math.min(millis, timeout))
+  override def await(millis: Long) = timeout match {
+    case Some(time) => super.await(scala.math.min(millis, time))
+    case None => super.await(millis)
+  }
 
-  override def ready = !timeouts.isEmpty && (timeout <= 0)
+  override def ready = timeout match { case Some(time) if time <= 0 => true; case _ => false }
 
   private[evil_ant] override def activate(s: TimerSignal) {
     val finishTime = s.finishTime

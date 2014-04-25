@@ -28,6 +28,22 @@ final class SelectorSignal(channel: SelectableChannel, operation: Integer, oneOf
     val key = channel.keyFor(selector)
     if(key != null) key.interestOps(0)
   }
+
+  private[this] def _emit(emitter: (SelectorSet) => Unit): Unit = {
+    requireOpen
+    if(!isEnabled) return
+
+    val set = new SelectorSet
+    try {
+      set += this
+      emitter(set)
+    }
+    finally set.close()
+  }
+
+  override def emit(obj: AnyRef) = _emit(_.emit(obj))
+  override def emitIn(obj: AnyRef, time: Long) = _emit(_.emitIn(obj, time))
+  override def emitNow(obj: AnyRef) = _emit(_.emitNow(obj))
 }
 
 final class SelectorSet extends SignalSet[SelectorSignal] with CloseableLike{
@@ -61,6 +77,8 @@ final class SelectorSet extends SignalSet[SelectorSignal] with CloseableLike{
     case selector: SelectorSignal => selector.callAbsorb(this, obj)
     case _ => throw new IllegalArgumentException
   }
+
+  override def emitNow(obj: AnyRef) = { selector.selectNow(); super.emitNow(obj) }
 
   override def doEmit(obj: AnyRef) {
     val keys = selector.selectedKeys()

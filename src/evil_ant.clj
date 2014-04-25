@@ -1,6 +1,6 @@
 (ns evil-ant
   (:refer-clojure :exclude [conj! disj!])
-  (:import [evil_ant Event Handler 
+  (:import [evil_ant Event Handler MultiSignalSet
                      SwitchSignal SwitchSet
                      TimerSignal TimerSet
                      SelectorSignal SelectorSet]
@@ -134,3 +134,6 @@
 
 (defn selector-set ([] (SelectorSet.))
   ([& selectors] (reduce conj! (selector-set) selectors)))
+
+(defn signal-set ([] (MultiSignalSet.))
+  ([& signals] (reduce conj! (signal-set) signals)))

@@ -10,6 +10,7 @@ trait Emitter[T] extends Closeable {
   protected def doEmit(value: AnyRef)
 
   def absorbers: Iterable[T]
+  def isEmpty = absorbers.isEmpty
 
   override def close() { super.close(); absorbers.foreach(this -= _) }
 
@@ -41,7 +42,15 @@ trait EmitterLike[This <: EmitterLike[This, A], A <: Absorber[A, This]] extends 
   private[this] def popAbsorber(a: A) { absorbers -= a }
 }
 
-trait Absorber[This <: Absorber[This, E], E <: Emitter[This]] extends CloseableLike {
+trait Enableable {
+  @volatile
+  private var _isEnabled = true
+  def enable { _isEnabled = true }
+  def disable { _isEnabled = false }
+  def isEnabled = _isEnabled
+}
+
+trait Absorber[This <: Absorber[This, E], E <: Emitter[This]] extends CloseableLike with Enableable {
   self: This =>
 
   @volatile
@@ -59,17 +68,11 @@ trait Absorber[This <: Absorber[This, E], E <: Emitter[This]] extends CloseableL
 
   override def close() { super.close(); emitters.foreach(_ -= this) }
 
-  @volatile
-  private var _isEnabled = true
-  def enable { _isEnabled = true }
-  def disable { _isEnabled = false }
-  def isEnabled = _isEnabled
-
   private[evil_ant] def callAbsorb(e: E, value: AnyRef) { if(isEnabled) absorb(e, value) }
   protected def absorb(e: E, value: AnyRef) {}
 }
 
-class IEvent(val oneOff: Boolean) extends EmitterLike[IEvent, IHandler] {
+class IEvent(val oneOff: Boolean) extends EmitterLike[IEvent, IHandler] with Enableable {
   def handlers = absorbers
 
   @volatile

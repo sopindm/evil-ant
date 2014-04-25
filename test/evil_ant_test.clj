@@ -26,6 +26,9 @@
 (defmacro ?actions= [actions & expected]
   `(?= (deref ~actions) [~@(map (fn [[e s]] {:emitter e :src s}) expected)]))
 
+(defmacro with-pipe [[source sink] & body]
+  `(let [[~source ~sink] (pipe-)] (with-open [~source ~source ~sink ~sink] ~@body)))
+
 (deftest simple-events-and-handlers
   (let [actions (atom [])
         e (e/event)
@@ -206,21 +209,8 @@
     (?= (e/attachment e) nil)))
 
 ;;
-;; Events multiset
+;; Event multisets
 ;;
-
-(comment
-(defmacro with-events [[trigger [timer timeout] [reader writer] set] & body]
-  `(let [~trigger (e/trigger)
-         ~timer (e/timer ~timeout)
-         pipe# (pipe-)
-         [~'a-pipe-reader ~'a-pipe-writer] pipe#
-         ~reader (e/selector (first pipe#) :read)
-         ~writer (e/selector (second pipe#) :write)
-         ~set (e/event-set ~trigger ~timer ~reader ~writer)]
-     ~@body
-     (.close ~'a-pipe-reader)
-     (.close ~'a-pipe-writer)))
 
 (defn pipe- []
   (let [pipe (java.nio.channels.Pipe/open)]
@@ -228,68 +218,91 @@
     (.configureBlocking (.source pipe) false)
     [(.source pipe) (.sink pipe)]))
 
+(defmacro with-events [[switch [timer timeout] [reader writer] set] & body]
+  `(let [pipe# (pipe-)
+         ~'actions (atom [])]
+     (with-open [~switch (e/switch)
+                 ~timer (e/timer ~timeout)
+                 ~'a-pipe-reader (first pipe#)
+                 ~'a-pipe-writer (second pipe#)
+                 ~reader (e/selector ~'a-pipe-reader :read)
+                 ~writer (e/selector ~'a-pipe-writer :write)
+                 ~set (e/signal-set ~switch ~timer ~reader ~writer)
+                 switch-handler# (action-handler ~'actions ~switch)
+                 timer-handler# (action-handler ~'actions ~timer)
+                 reader-handler# (action-handler ~'actions ~reader)
+                 writer-handler# (action-handler ~'actions ~writer)]
+       ~@body)))
+
 (deftest making-multiset
-  (with-events [trigger [timer 123] [reader writer] s]
-    (?= (set (e/signals s)) #{trigger timer reader writer})
-    (?= (-> s .triggers e/signals seq) [trigger])
-    (?= (-> s .timers e/signals seq) [timer])
-    (?= (-> s .selectors e/signals set) #{reader writer})
-    (?throws (e/conj! s (proxy [madnet.event.Signal] [])) IllegalArgumentException)))
+  (with-events [switch [timer 123] [reader writer] s]
+    (?= (set (e/absorbers s)) #{switch timer reader writer})
+    (?= (-> s .switches e/absorbers seq) [switch])
+    (?= (-> s .timers e/absorbers seq) [timer])
+    (?= (-> s .selectors e/absorbers set) #{reader writer})
+    (?throws (e/conj! s (proxy [evil_ant.Signal] [false])) IllegalArgumentException)))
 
-(deftest selecting-on-multiset-with-trigger
-  (with-events [trigger [timer 1000] [selector _] s]
-    (e/start! trigger)
-    (e/start! timer)
-    (e/start! selector)
-    (?= (e/for-selections [e s] e) [trigger])))
+(deftest emitting-multiset-with-switch
+  (with-events [switch [timer 1000] [reader writer] s]
+    (e/turn-on! switch)
+    (e/disable! writer)
+    (e/emit! s 123)
+    (?actions= actions [switch 123])))
 
-(deftest selecting-on-multiset-with-timer
-  (with-events [trigger [timer 0] [selector _] s]
-    (e/start! timer)
-    (e/start! selector)
-    (Thread/sleep 2)
-    (?= (e/for-selections [e s] e) [timer]))
-  (with-events [trigger [timer 3] [selector _] s]
-    (e/start! timer)
-    (e/start! selector)
-    (?= (e/for-selections [e s] e) [timer]))
-  (with-events [trigger [timer 5] [selector _] s]
-    (e/start! timer)
-    (e/start! selector)
-    (let [f (future (e/select s))]
+(deftest emitting-multiset-with-zero-timer
+  (with-events [trigger [timer 0] [reader writer] s]
+    (e/disable! writer)
+    (e/emit-now! s 123)
+    (?actions= actions [timer 123])))
+
+(deftest emitting-multiset-with-nozero-timer
+  (with-events [trigger [timer 5] [reader writer] s]
+    (e/disable! writer)
+    (e/emit! s 123)
+    (?actions= actions [timer 123])))
+
+(deftest selecting-on-multiset-no-active-timer
+  (with-events [switch [timer 1000] [reader writer] s]
+    (e/disable! writer)
+    (let [f (future (e/emit! s 123) (:emitter (first @actions)))]
       (Thread/sleep 2)
-      (e/start! trigger)
-      (?= (seq @f) [trigger]))))
+      (e/turn-on! switch)
+      (Thread/sleep 2)
+      (?actions= actions [switch 123]))))
 
-(deftest selecting-on-multiset-with-selector
+(deftest multisets-with-simple-selector
+  (with-events [switch [timer 10] [reader writer] s]
+    (e/emit! s 123)
+    (?actions= actions [writer 123])))
+
+(deftest blocking-emit-with-selectors
   (with-events [trigger [timer 10] [reader writer] s]
-    (e/start! timer)
-    (e/start! reader)
-    (e/start! writer)
-    (?= (e/for-selections [e s] e) [writer]))
-  (with-events [trigger [timer 10] [reader writer] s]
-    (e/start! timer)
-    (e/start! reader)
-    (let [f (future (e/select s))]
+    (e/disable! writer)
+    (let [f (future (e/emit! s 123) (map :emitter @actions))]
       (Thread/sleep 3)
       (.write a-pipe-writer (java.nio.ByteBuffer/wrap (byte-array (map byte (range 10)))))
-      (?= (seq @f) [reader])))
-  (with-events [trigger [timer 10] [reader writer] s]
-    (e/start! writer)
-    (?= (seq (e/select s)) [writer])))
+      (?= (seq @f) [reader]))))
 
-(deftest selecting-without-any-trigger
-  (let [timer (e/timer 10)
-        selector (e/selector (second (pipe-)) :write)
-        s (e/event-set timer selector)]
-    (e/start! selector)
-    (e/start! timer)
-    (?= (seq (e/select s)) [selector]))
-  (let [selector (e/selector (second (pipe-)) :write)
-        s (e/event-set selector)]
-    (e/start! selector)
-    (?= (seq (e/select s)) [selector])))
+(deftest selecting-multiset-with-only-selector
+  (with-pipe [source sink]
+    (let [actions (atom [])]
+      (with-open [selector (e/selector sink :write)
+                  handler (action-handler actions selector)
+                  s (e/signal-set selector)]
+        (e/emit! s 123)
+        (?actions= actions [selector 123])))))
 
+(deftest selecting-multiset-with-selectors-and-timers
+  (with-pipe [source sink]
+    (let [actions (atom [])]
+      (with-open [timer (e/timer 1000)
+                  selector (e/selector sink :write)
+                  s (e/signal-set timer selector)
+                  handler (action-handler actions selector)]
+        (e/emit! s 123)
+        (?actions= actions [selector 123])))))
+
+(comment
 (deftest selecting-without-any-selector
   (let [timer (e/timer 10)
         trigger (e/trigger)
@@ -360,37 +373,5 @@
     (?= (.provider timer) nil)
     (?= (.provider reader) nil)
     (?= (.provider writer) nil)
-    (?throws (e/disj! s (proxy [madnet.event.Signal] [])) IllegalArgumentException)))
-
-(deftest default-events-persistence
-  (with-events [trigger [timer 0] [reader writer] s]
-    (?false (e/persistent? trigger))
-    (?false (e/persistent? timer))
-    (?true (e/persistent? reader))
-    (?true (e/persistent? writer))))
-
-;making triggers, selectors with explicit persistence
-
-;;
-;; Event loops
-;;
-
-(deftest event-loops
-  (let [a (atom [])
-        t1 (e/trigger 1)
-        t2 (e/trigger 2)
-        s (e/event-set t1 t2)
-        e1 (e/event ([e s] (swap! a conj s)) t1)
-        e2 (e/event ([e s] (swap! a conj s)) t2)
-        f (future (e/loop s))]
-    (e/start! t1)
-    (Thread/sleep 1)
-    (?= @a [1])
-    (reset! a [])
-    (e/start! t1) (e/start! t2)
-    (Thread/sleep 1)
-    (?= (set @a) #{1 2})
-    (future-cancel f))))
-
-
+    (?throws (e/disj! s (proxy [madnet.event.Signal] [])) IllegalArgumentException))))
 

@@ -3,13 +3,13 @@ package evil_ant
 trait BlockingEmitter[T] extends Emitter[T] {
   def ready: Boolean
 
-  def signal() { this.synchronized { notify() } }
+  def signal() { this.synchronized { notifyAll() } }
 
   def await() = wait()
   def await(milliseconds: Long) = if(milliseconds > 0) wait(milliseconds)
 
   override def emit(obj: AnyRef) {
-    this.synchronized { while(!ready) await() }
+    this.synchronized { if(!ready) await()}
     super.emit(obj)
   }
 
@@ -17,27 +17,31 @@ trait BlockingEmitter[T] extends Emitter[T] {
     val startTime = System.currentTimeMillis
     def remainingTime() = milliseconds - (System.currentTimeMillis() - startTime)
 
-    this.synchronized { while(!ready && remainingTime() > 0) await(remainingTime()) }
+    this.synchronized { if(!ready && remainingTime() > 0) await(remainingTime()) }
     super.emitIn(obj, milliseconds)
   }
 
   override def emitNow(obj: AnyRef) = if(ready) super.emitNow(obj)
 }
 
-abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[This]](oneOff: Boolean)
-    extends IEvent(oneOff)
-    with BlockingEmitter[IHandler] with EmitterLike[IEvent, IHandler]
-    with Absorber[This, Set] {
-  self: This =>
-
-  protected def activate() = emitters.foreach(_.activate(this))
-  protected def deactivate() = emitters.foreach(_.deactivate(this))
+abstract class ISignal(oneOff: Boolean) extends IEvent(oneOff)
+    with BlockingEmitter[IHandler] with EmitterLike[IEvent, IHandler] {
+  protected def activate()
+  protected def deactivate()
 
   def active = isEnabled
   override def ready = isEnabled
+}
+
+abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[This]](oneOff: Boolean)
+    extends ISignal(oneOff) with Absorber[This, Set] {
+  self: This =>
+
+  override protected def activate() = emitters.foreach(_.activate(this))
+  override protected def deactivate() = emitters.foreach(_.deactivate(this))
 
   override def enable { super.enable; if(active) activate() }
-  override def disable { super.disable; if(active) deactivate() }
+  override def disable { deactivate(); super.disable; if(active) activate() }
 
   override def absorb(e: Set, obj: AnyRef) = emitNow(obj)
 }
