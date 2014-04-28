@@ -342,45 +342,21 @@
     (e/emit-in! s 100 10)
     (?actions= actions [timer 100])))
 
-(comment
-(defmacro with-timeout [timeout & form]
-  `(let [agent# (agent nil)]
-     (send-off agent# (fn [s#] ~@form))
-     (when-not (await-for ~timeout agent#)
-       (throw (Exception. (str "Agent timeout: " (agent-errors agent#)))))))
-
-(deftest selecting-multiset-with-only-timeouts
-  (let [e (e/timer 4)
-        s (e/event-set e)]
-    (e/start! e)
-    (?= (seq (e/for-selections [e s] e)) [e])
-    (e/start! e)
-    (?= (seq (e/for-selections [e s :timeout 0] e)) nil)
-    (?= (seq (e/for-selections [e s :timeout 1] e)) nil)
-    (?= (seq (e/for-selections [e s :timeout 10] e)) [e])))
-
 (deftest closing-multiset
-  (with-events [trigger [timer 0] [reader writer] s]
+  (with-events [switch [timer 0] [reader writer] s]
     (.close s)
     (?false (.isOpen s))
-    (?false (.isOpen (.triggers s)))
+    (?false (.isOpen (.switches s)))
     (?false (.isOpen (.timers s)))
     (?false (.isOpen (.selectors s)))))
 
-(deftest for-selections-into
-  (let [[t1 t2] (repeatedly 2 e/trigger)
-        s (e/event-set t1 t2)]
-    (e/start! t1) (e/start! t2)
-    (?= (e/for-selections [e s :into #{}] e) #{t1 t2})))
-
 (deftest disj-on-multiset
-  (with-events [trigger [timer 0] [reader writer] s]
-    (e/disj! s trigger timer reader writer)
-    (e/select s :timeout 0)
-    (?= (seq (e/signals s)) nil)
-    (?= (.provider trigger) nil)
-    (?= (.provider timer) nil)
-    (?= (.provider reader) nil)
-    (?= (.provider writer) nil)
-    (?throws (e/disj! s (proxy [madnet.event.Signal] [])) IllegalArgumentException))))
-
+  (with-events [switch [timer 0] [reader writer] s]
+    (e/disj! s switch timer reader writer)
+    (e/emit-now! s 123)
+    (?= (seq (e/absorbers s)) nil)
+    (?= (seq (e/emitters switch)) nil)
+    (?= (seq (e/emitters timer)) nil)
+    (?= (seq (e/emitters reader)) nil)
+    (?= (seq (e/emitters writer)) nil)
+    (?throws (e/disj! s (proxy [evil_ant.ISignal] [false])) IllegalArgumentException)))

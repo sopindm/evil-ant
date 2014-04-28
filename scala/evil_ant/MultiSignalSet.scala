@@ -8,8 +8,8 @@ class MultiSignalSet extends Emitter[ISignal] {
   val timers = new TimerSet
   val selectors = new SelectorSet
 
-  override def close() {}
-  override def isOpen = true
+  override def close() { switches.close(); timers.close(); selectors.close() }
+  override def isOpen = switches.isOpen && timers.isOpen && selectors.isOpen
 
   override def +=(signal: ISignal) = {
     signal match {
@@ -22,13 +22,12 @@ class MultiSignalSet extends Emitter[ISignal] {
   }
 
   override def -=(signal: ISignal) = {
-    /*
     signal match {
       case switch: SwitchSignal => switches -= switch
       case timer: TimerSignal => timers -= timer
       case selector: SelectorSignal => selectors -= selector
       case _ => throw new IllegalArgumentException
-    }*/
+    }
     this
   }
 
