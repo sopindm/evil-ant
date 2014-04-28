@@ -1,5 +1,6 @@
 package evil_ant
 import scala.concurrent._
+import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class MultiSignalSet extends Emitter[ISignal] {
@@ -33,30 +34,47 @@ class MultiSignalSet extends Emitter[ISignal] {
 
   override def absorbers = switches.absorbers ++ timers.absorbers ++ selectors.absorbers
 
-  private[this] def _emit(obj: AnyRef) =
-    if(switches.isEmpty) selectors.emit(obj)
-    else if(selectors.isEmpty) switches.emit(obj)
-    else {
-      val selection = future { selectors.emit(obj); switches.signal() }
-      switches.emit(obj)
-      selectors.signal()
-    }
+  private[this] def _emit(obj: AnyRef, select: (AnyRef => Boolean), switch: (AnyRef => Boolean)) =
+    if(switches.isEmpty) select(obj)
+    else if(selectors.isEmpty) switch(obj)
+    else if(_emitNow(obj)) true
+    else _emitAll(obj, select, switch)
 
-  private[this] def _emitIn(obj: AnyRef, time: Long) =
-    if(switches.isEmpty) selectors.emitIn(obj, time)
-    else if(selectors.isEmpty) switches.emitIn(obj, time)
-    else {
-      val selection = future { selectors.emitIn(obj, time); switches.signal() }
-      switches.emitIn(obj, time)
-      selectors.signal()
-    }
+  private[this] def _emitNow(obj: AnyRef) = {
+    val selectorsReady = selectors.emitNow(obj)
+    val switchesReady = switches.emitNow(obj)
 
-  override def emit(obj: AnyRef) =  timers.timeout match {
-    case Some(time) => { _emitIn(obj, time); timers.emitNow(obj) }
-    case None => _emit(obj)
+    if(selectorsReady || switchesReady) { timers.emitNow(obj); true } else false
   }
 
-  override def emitNow(obj: AnyRef) { switches.emitNow(obj); timers.emitNow(obj) }
+  private[this] def _emitAll(obj: AnyRef, select: (AnyRef => Boolean), switch: (AnyRef => Boolean)) = {
+    val selection = future { try select(obj) finally switches.signal() }
+
+    val switched = try switch(obj) finally selectors.signal()
+    val selected = Await.result(selection, Duration.Inf)
+
+    if(switched || selected) true else timers.emitNow(obj)
+  }
+
+  override def emit(obj: AnyRef) = timers.timeout match {
+    case Some(time) => _emit(obj, selectors.emitIn(_, time), switches.emitIn(_, time))
+    case None => _emit(obj, selectors.emit(_), switches.emit(_))
+  }
+
+  override def emitIn(obj: AnyRef, millis: Long) = {
+    val timeout = timers.timeout match {
+      case Some(time) => scala.math.min(time, millis)
+      case None => millis
+    }
+    _emit(obj, selectors.emitIn(_, timeout), switches.emitIn(_, timeout))
+  }
+
+  override def emitNow(obj: AnyRef) = {
+    val switched = switches.emitNow(obj)
+    val selected = selectors.emitNow(obj)
+    val timedOut = timers.emitNow(obj)
+    switched || selected || timedOut
+  }
 
   override protected def doEmit(value: AnyRef) { throw new UnsupportedOperationException }
 }

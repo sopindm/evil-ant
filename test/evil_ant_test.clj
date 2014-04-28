@@ -302,38 +302,47 @@
         (e/emit! s 123)
         (?actions= actions [selector 123])))))
 
+(deftest selecting-multiset-with-only-switch
+  (let [actions (atom [])]
+    (with-open [e (e/switch)
+                s (e/signal-set e)
+                h (action-handler actions e)]
+      (e/turn-on! e)
+      (e/emit! s 123)
+      (?actions= actions [e 123]))))
+
+(deftest selecting-without-selectors
+  (let [actions (atom [])]
+    (with-open [timer (e/timer 10)
+                switch (e/switch)
+                s (e/signal-set timer switch)
+                h (action-handler actions switch)]
+      (e/turn-on! switch)
+      (e/emit! s 123)
+      (?actions= actions [switch 123]))))
+
+(deftest selecting-multiset-now
+  (with-events [switch [timer 0] [reader writer] s]
+    (e/turn-on! switch)
+    (e/emit-now! s 123)
+    (?= (set (map :emitter @actions)) #{switch timer writer})))
+
+(deftest selecting-multiset-with-timeout
+  (with-events [switch [timer 8] [reader writer] s]
+    (e/disable! writer)
+    (e/emit-in! s 123 3)
+    (?actions= actions)
+    (e/turn-on! switch)
+    (e/enable! writer)
+    (e/emit-in! s 100 3)
+    (?= (set (map :emitter @actions)) #{switch writer})
+    (e/disable! writer)
+    (e/turn-off! switch)
+    (reset! actions [])
+    (e/emit-in! s 100 10)
+    (?actions= actions [timer 100])))
+
 (comment
-(deftest selecting-without-any-selector
-  (let [timer (e/timer 10)
-        trigger (e/trigger)
-        s (e/event-set timer trigger)]
-    (e/start! trigger)
-    (e/start! timer)
-    (?= (seq (e/select s)) [trigger]))
-  (let [trigger (e/trigger)
-        s (e/event-set trigger)]
-    (e/start! trigger)
-    (?= (seq (e/select s)) [trigger])))
-
-(deftest selecting-event-set-now
-  (with-events [trigger [timer 0] [reader writer] s]
-    (e/start! trigger)
-    (e/start! timer)
-    (e/start! reader)
-    (e/start! writer)
-    (?= (set (e/select s :timeout 0)) #{trigger timer writer})))
-
-(deftest selecting-multievent-with-timeout
-  (with-events [trigger [timer 8] [reader writer] s]
-    (e/start! timer)
-    (e/start! reader)
-    (?= (seq (e/select s :timeout 3)) nil)
-    (e/start! trigger)
-    (e/start! writer)
-    (?= (set (e/for-selections [e s :timeout 3] e)) #{trigger writer})
-    (e/stop! writer)
-    (?= (set (e/for-selections [e s :timeout 10] e)) #{timer})))
-
 (defmacro with-timeout [timeout & form]
   `(let [agent# (agent nil)]
      (send-off agent# (fn [s#] ~@form))

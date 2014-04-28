@@ -3,11 +3,11 @@ package evil_ant
 trait Emitter[T] extends Closeable {
   protected def requireOpen = if(!isOpen) throw new ClosedEmitterException()
 
-  def emit(value: AnyRef) = emitNow(value)
-  def emitIn(value: AnyRef, timeInMilliseconds: Long) = emitNow(value)
-  def emitNow(value: AnyRef) = { requireOpen; doEmit(value) }
+  def emit(value: AnyRef): Boolean = emitNow(value)
+  def emitIn(value: AnyRef, timeInMilliseconds: Long): Boolean = emitNow(value)
+  def emitNow(value: AnyRef): Boolean = { requireOpen; doEmit(value); true }
 
-  protected def doEmit(value: AnyRef)
+  protected def doEmit(value: AnyRef): Unit
 
   def absorbers: Iterable[T]
   def isEmpty = absorbers.isEmpty
