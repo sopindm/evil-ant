@@ -7,6 +7,7 @@ final class SwitchSignal(oneOff: Boolean) extends Signal[SwitchSignal, SwitchSet
 
   def turnOn() { isOn.set(true); activate(); signal() }
   def turnOff() { isOn.set(false); deactivate() }
+  def turn(on: Boolean) = if(on) turnOn() else turnOff()
 
   override def ready = super.ready && isOn.get
   override def active = ready
