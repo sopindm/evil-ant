@@ -72,11 +72,7 @@
 (defn when-any ([] (proxy [Event] [] (absorb [e s] (.emit this s))))
   ([& events] (apply absorber-conj (when-any) events)))
 
-(defn when-every ([] (proxy [Event] [true]
-                       (absorb [e s]
-                         (disj! e this)
-                         (when (-> this events .isEmpty)
-                           (emit! this s)))))
+(defn when-every ([] (evil_ant.WhenEveryEvent.))
   ([& events] (apply absorber-conj (when-every) events)))
 
 ;;

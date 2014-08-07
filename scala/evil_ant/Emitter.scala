@@ -95,5 +95,12 @@ class Event(oneOff: Boolean) extends IEvent(oneOff) with IHandler {
   def this() = this(false)
 }
 
+class WhenEveryEvent extends Event(true) {
+  override def absorb(e: IEvent, obj: AnyRef) {
+    e -= this
+    if(events.isEmpty) emit(obj)
+  }
+}
+
 class Handler extends IHandler
 
