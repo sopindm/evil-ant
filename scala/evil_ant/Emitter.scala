@@ -83,6 +83,7 @@ class IEvent(val oneOff: Boolean) extends EmitterLike[IEvent, IHandler] with Ena
 
   override def close() { super.close(); _attachment = null }
   override protected def doEmit(value: AnyRef) {
+    if(!isEnabled) return
     super.doEmit(if(attachment != null) attachment else value); if(oneOff) close() }
 }
 

@@ -163,6 +163,14 @@
     (e/emit! e 123)
     (?action= actions [e 123])))
 
+(deftest disabling-event
+  (let [actions (atom [])
+        e (e/event)
+        h (action-handler actions e)]
+    (e/disable! e)
+    (e/emit! e 123)
+    (?actions= actions)))
+
 (deftest events-as-handlers
   (let [actions (atom [])
         e (e/event)
