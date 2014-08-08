@@ -1,4 +1,4 @@
-(defproject evil-ant "0.1.3"
+(defproject evil-ant "0.2.0-SNAPSHOT"
   :description "Clojure event system"
   :url "http://devilin.net/evil-ant/"
   :license {:name "Eclipse Public License"

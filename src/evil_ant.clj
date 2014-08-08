@@ -1,6 +1,7 @@
 (ns evil-ant
   (:refer-clojure :exclude [conj! disj!])
   (:import [evil_ant Event Handler MultiSignalSet
+                     TriggerSignal TriggerSet
                      SwitchSignal SwitchSet
                      TimerSignal TimerSet
                      SelectorSignal SelectorSet]
@@ -79,11 +80,13 @@
 ;; Signals
 ;;
 
-(defmacro defsignal [[name [& args] & body] [set-name & set-body]]
-  `(do (defn ~name ([~@args] ~@body)
-         ([~@args attachment#] (doto (~name ~@args) (attach! attachment#))))
-       (defn ~set-name ([] ~@set-body)
-         ([& triggers#] (reduce conj! (~set-name) triggers#)))))
+(defn trigger ([] (TriggerSignal.))
+  ([& {:keys [one-off]}] (TriggerSignal. (boolean one-off))))
+
+(defn trigger-set ([] (TriggerSet.))
+  ([& signals] (reduce conj! (trigger-set) signals)))
+
+(defn touch! [trigger] (.touch trigger))
 
 (defn switch ([] (SwitchSignal.))
   ([& {:keys [attachment one-off]}]
