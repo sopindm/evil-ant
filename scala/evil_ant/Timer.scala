@@ -26,8 +26,8 @@ final class TimerSignal(val timeout: Long, circular: Boolean, oneOff: Boolean)
   override def active = started
   override def ready = !active || currentTime() >= finishTime
 
-  override def doEmit(obj: AnyRef) = if(ready && active) {
-    super.doEmit(obj)
+  override def doEmit = if(ready && active) {
+    super.doEmit
     if(circular) start else stop
   }
 }
@@ -71,12 +71,12 @@ final class TimerSet extends SignalSetLike[TimerSet, TimerSignal] {
   }
 
   @tailrec
-  override final def doEmit(obj: AnyRef) =
+  override final def doEmit =
     if(ready) {
       val head = timeouts.updateAndGet(ts => (ts.tail, ts.head))
       if(head._1 <= System.currentTimeMillis()) {
-        head._2.foreach(_.callAbsorb(this, obj))
-        doEmit(obj)
+        head._2.foreach(_.callAbsorb(this))
+        doEmit
       }
       else
         head._2.foreach(activate(_))

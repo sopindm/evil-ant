@@ -3,11 +3,11 @@ package evil_ant
 trait Emitter[T] extends Closeable {
   protected def requireOpen = if(!isOpen) throw new ClosedEmitterException()
 
-  def emit(value: AnyRef): Boolean = emitNow(value)
-  def emitIn(value: AnyRef, timeInMilliseconds: Long): Boolean = emitNow(value)
-  def emitNow(value: AnyRef): Boolean = { requireOpen; doEmit(value); true }
+  def emit: Boolean = emitNow
+  def emitIn(timeInMilliseconds: Long): Boolean = emitNow
+  def emitNow: Boolean = { requireOpen; doEmit; true }
 
-  protected def doEmit(value: AnyRef): Unit
+  protected def doEmit: Unit
 
   def absorbers: Iterable[T]
   def isEmpty = absorbers.isEmpty
@@ -29,7 +29,7 @@ trait EmitterLike[This <: EmitterLike[This, A], A <: Absorber[A, This]] extends 
   private def absorbers_=(v: AtomicSet[A]) { _absorbers = v }
   override def absorbers = _absorbers
 
-  override protected def doEmit(value: AnyRef) { absorbers.foreach(_.callAbsorb(this, value)) }
+  override protected def doEmit { absorbers.foreach(_.callAbsorb(this)) }
 
   override def +=(a: A): This = { a.pushEmitter(this); pushAbsorber(a); this }
   override def -=(a: A): This = { a.popEmitter(this); popAbsorber(a); this }
@@ -68,16 +68,16 @@ trait Absorber[This <: Absorber[This, E], E <: Emitter[This]] extends CloseableL
 
   override def close() { super.close(); emitters.foreach(_ -= this) }
 
-  private[evil_ant] def callAbsorb(e: E, value: AnyRef) { if(isEnabled) absorb(e, value) }
-  protected def absorb(e: E, value: AnyRef) {}
+  private[evil_ant] def callAbsorb(e: E) { if(isEnabled) absorb(e) }
+  protected def absorb(e: E) {}
 }
 
 class IEvent(val oneOff: Boolean) extends EmitterLike[IEvent, IHandler] with Enableable {
   def handlers = absorbers
 
-  override protected def doEmit(value: AnyRef) {
+  override protected def doEmit {
     if(!isEnabled) return
-    super.doEmit(value)
+    super.doEmit
     if(oneOff) close()
   }
 }
@@ -91,9 +91,9 @@ class Event(oneOff: Boolean) extends IEvent(oneOff) with IHandler {
 }
 
 class WhenEveryEvent extends Event(true) {
-  override def absorb(e: IEvent, obj: AnyRef) {
+  override def absorb(e: IEvent) {
     e -= this
-    if(events.isEmpty) emit(obj)
+    if(events.isEmpty) emit
   }
 }
 

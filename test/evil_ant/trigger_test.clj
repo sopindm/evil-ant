@@ -19,28 +19,28 @@
         hs (doall (map #(action-handler a %) es))
         s (apply e/trigger-set es)]
     (doall (map #(e/touch! %) (take 3 (drop 2 es))))
-    (e/emit! s 123)
-    (?= (set @a) (set (map (fn [x] {:emitter x :src 123}) (take 3 (drop 2 es)))))))
+    (e/emit! s)
+    (?= (set @a) (set (take 3 (drop 2 es))))))
 
 (deftest trigger-sets-never-block
   (let [es (repeatedly 5 #(e/trigger))
         s (apply e/trigger-set es)]
-    (let [f (future (e/emit! s 123))]
+    (let [f (future (e/emit! s))]
       (Thread/sleep 1)
       (?true (realized? f)))
-    (let [f (future (e/emit-in! s 123 1000))]
+    (let [f (future (e/emit-in! s 1000))]
       (Thread/sleep 1)
       (?true (realized? f)))
-    (?true (e/emit-now! s 123))))
+    (?true (e/emit-now! s))))
 
 (deftest closing-trigger-set
   (let [e (e/trigger)
         s (e/trigger-set e)]
     (.close s)
     (?= (seq (e/emitters e)) nil)
-    (?throws (e/emit! s 123) ClosedEmitterException)
-    (?throws (e/emit-in! s 123 111) ClosedEmitterException)
-    (?throws (e/emit-now! s 123) ClosedEmitterException)))
+    (?throws (e/emit! s) ClosedEmitterException)
+    (?throws (e/emit-in! s 111) ClosedEmitterException)
+    (?throws (e/emit-now! s) ClosedEmitterException)))
 
 (deftest emitting-trigger-in-triggers-handler
   (let [e1 (e/trigger)
@@ -51,8 +51,8 @@
     (action-handler actions e1)
     (action-handler actions e2)
     (e/touch! e1)
-    (e/emit! s 123)
-    (?actions= actions [e1 123] [e2 123])))
+    (e/emit! s)
+    (?actions= actions e1 e2)))
 
 
 

@@ -33,14 +33,13 @@
         (?= (set (e/absorbers s)) #{rdr wrt})
         (?= (seq (e/emitters rdr)) [s])
         (?= (seq (e/emitters wrt)) [s])
-        (e/emit! s 123)
-        (?actions= actions [wrt 123])
+        (e/emit! s)
+        (?actions= actions wrt)
         (.write sink (java.nio.ByteBuffer/wrap
                       (byte-array (map byte (range 5)))))
         (reset! actions [])
-        (e/emit! s 234)
-        (?= (set @actions) #{{:emitter rdr :src 234}
-                             {:emitter wrt :src 234}})))))
+        (e/emit! s)
+        (?= (set @actions) #{rdr wrt})))))
 
 (deftest selectors-emit-now
   (with-pipe [source sink]
@@ -48,8 +47,8 @@
       (with-open [writer (e/selector sink :write)
                   s (e/selector-set writer)
                   handler (action-handler actions writer)]
-        (e/emit-now! s 123)
-        (?actions= actions [writer 123])))))
+        (e/emit-now! s)
+        (?actions= actions writer)))))
 
 (deftest disabling-selectors
   (with-pipe [source sink]
@@ -61,14 +60,14 @@
                   e2 (action-handler actions wrt)]
         (.write sink (java.nio.ByteBuffer/wrap (byte-array (map byte (range 5)))))
         (e/disable! wrt)
-        (e/emit! s 123)
-        (?actions= actions [rdr 123])
+        (e/emit! s)
+        (?actions= actions rdr)
         (e/disable! rdr)
-        (e/emit-now! s 234)
-        (?actions= actions [rdr 123])
+        (e/emit-now! s)
+        (?actions= actions rdr)
         (e/enable! wrt)
-        (e/emit! s 345)
-        (?actions= actions [rdr 123] [wrt 345])))))
+        (e/emit! s)
+        (?actions= actions rdr wrt)))))
 
 (deftest select-for-set-with-disabled-event-blocks
   (with-pipe [source sink]
@@ -77,7 +76,7 @@
                   writer (e/selector sink :write)
                   s (e/selector-set reader writer)]
         (e/disable! writer)
-        (let [f (future (e/emit! s 123))]
+        (let [f (future (e/emit! s))]
           (Thread/sleep 2)
           (?false (realized? f))
           (.signal s)
@@ -88,7 +87,7 @@
   (with-pipe [source sink]
     (with-open [rdr (e/selector source :read)
                 s (e/selector-set rdr)]
-      (e/emit-in! s 123 3))))
+      (e/emit-in! s 3))))
 
 (deftest closing-selection-set
   (with-pipe [source sink]

@@ -11,9 +11,9 @@
 ;; Emitter/absorber functions
 ;;
 
-(defn emit! [emitter arg] (.emit emitter arg))
-(defn emit-now! [emitter arg] (.emitNow emitter arg))
-(defn emit-in! [emitter arg timeout] (.emitIn emitter arg timeout))
+(defn emit! [emitter] (.emit emitter))
+(defn emit-now! [emitter] (.emitNow emitter))
+(defn emit-in! [emitter timeout] (.emitIn emitter timeout))
 
 (defn conj! ([emitter] emitter)
   ([emitter absorber] (.conj emitter absorber))
@@ -39,12 +39,12 @@
 ;; Events and handlers 
 ;;
 
-(defmacro handler- [class args [[emitter source] & handler] setup & events-and-options]
-  `(~setup (proxy [~class] [~@args] (absorb [~(or emitter '_) ~(or source '_)] ~@handler))
+(defmacro handler- [class args [[emitter] & handler] setup & events-and-options]
+  `(~setup (proxy [~class] [~@args] (absorb [~(or emitter '_)] ~@handler))
            ~@events-and-options))
 
-(defmacro handler [[[emitter source] & handler] & events]
-  `(handler- Handler () ([~emitter ~source] ~@handler) #'absorber-conj ~@events))
+(defmacro handler [[[emitter] & handler] & events]
+  `(handler- Handler () ([~emitter] ~@handler) #'absorber-conj ~@events))
 
 (defn- setup-event- 
   ([event] event)
@@ -67,7 +67,7 @@
 (defn handlers [event] (scala-collection (.handlers event)))
 (defn events [handler] (scala-collection (.events handler)))
 
-(defn when-any ([] (proxy [Event] [] (absorb [e s] (.emit this s))))
+(defn when-any ([] (proxy [Event] [] (absorb [e] (.emit this))))
   ([& events] (apply absorber-conj (when-any) events)))
 
 (defn when-every ([] (evil_ant.WhenEveryEvent.))

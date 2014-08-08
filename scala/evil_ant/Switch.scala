@@ -12,7 +12,7 @@ final class SwitchSignal(oneOff: Boolean) extends Signal[SwitchSignal, SwitchSet
   override def ready = super.ready && isOn.get
   override def active = ready
 
-  override def absorb( e: SwitchSet, obj: AnyRef) = if(!active) turnOff() else emitNow(obj)
+  override def absorb( e: SwitchSet) = if(!active) turnOff() else emitNow
 }
 
 final class SwitchSet extends SignalSetLike[SwitchSet, SwitchSignal] {
@@ -23,6 +23,6 @@ final class SwitchSet extends SignalSetLike[SwitchSet, SwitchSignal] {
 
   override def ready = !active.isEmpty || (active.isEmpty && absorbers.isEmpty)
 
-  override def doEmit(obj: AnyRef) = active.foreach(_.callAbsorb(this, obj))
+  override def doEmit = active.foreach(_.callAbsorb(this))
 }
 

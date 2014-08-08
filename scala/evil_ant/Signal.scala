@@ -8,20 +8,20 @@ trait BlockingEmitter[T] extends Emitter[T] {
   def await() = wait()
   def await(milliseconds: Long) = if(milliseconds > 0) wait(milliseconds)
 
-  override def emit(obj: AnyRef): Boolean = {
+  override def emit: Boolean = {
     this.synchronized { if(!ready) await()}
-    super.emit(obj)
+    super.emit
   }
 
-  override def emitIn(obj: AnyRef, milliseconds: Long): Boolean = {
+  override def emitIn(milliseconds: Long): Boolean = {
     val startTime = System.currentTimeMillis
     def remainingTime() = milliseconds - (System.currentTimeMillis() - startTime)
 
     this.synchronized { if(!ready && remainingTime() > 0) await(remainingTime()) }
-    if(ready) super.emitIn(obj, milliseconds) else false
+    if(ready) super.emitIn(milliseconds) else false
   }
 
-  override def emitNow(obj: AnyRef) = if(ready) super.emitNow(obj) else false
+  override def emitNow = if(ready) super.emitNow else false
 }
 
 abstract class ISignal(oneOff: Boolean) extends IEvent(oneOff)
@@ -43,7 +43,7 @@ abstract class Signal[This <: Signal[This, Set], Set <: SignalSet[This]](oneOff:
   override def enable { super.enable; if(active) activate() }
   override def disable { deactivate(); super.disable; if(active) activate() }
 
-  override def absorb(e: Set, obj: AnyRef) = emitNow(obj)
+  override def absorb(e: Set) = emitNow
 }
 
 abstract class SignalSet[T] extends BlockingEmitter[T] {

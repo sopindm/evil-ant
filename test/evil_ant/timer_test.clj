@@ -72,24 +72,24 @@
         timers [(e/timer 0) (e/timer 3) (e/timer 6)]
         s (apply e/timer-set timers)]
     (doseq [t timers] (action-handler a t))
-    (e/emit-now! s 123)
-    (?actions= a [(first timers) 123])
+    (e/emit-now! s)
+    (?actions= a (first timers))
     (reset! a [])
-    (e/emit-in! s 234 1000)
-    (?actions= a [(second timers) 234])
+    (e/emit-in! s 1000)
+    (?actions= a (second timers))
     (reset! a [])
-    (e/emit-in! s 345 1000)
-    (?action= a [(nth timers 2) 345])))
+    (e/emit-in! s 1000)
+    (?action= a (nth timers 2))))
 
 (deftest starting-timer-after-set-emit
   (let [a (atom [])
         timer (e/timer 0)
         s (e/timer-set)
         h (action-handler a timer)
-        f (future (e/emit! s 123))]
+        f (future (e/emit! s))]
     (Thread/sleep 1)
     (?false (realized? f))
     (e/conj! s timer)
     (Thread/sleep 1)
     (?true (realized? f))
-    (?actions= a [timer 123])))
+    (?actions= a timer)))

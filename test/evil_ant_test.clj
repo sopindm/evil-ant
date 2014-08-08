@@ -8,23 +8,23 @@
 
 (defmacro -?emit= [emitter value form]
   `(let [actions# (atom [])]
-     (with-open [handler# (e/handler ([e# s#] (swap! actions# #(conj % e#))) ~emitter)]
+     (with-open [handler# (e/handler ([e#] (swap! actions# #(conj % e#))) ~emitter)]
        ~form
        (?= (seq @actions#) ~value))))
 
-(defmacro ?emit-now= [emitter value] `(-?emit= ~emitter ~value (e/emit-now! ~emitter (gensym))))
+(defmacro ?emit-now= [emitter value] `(-?emit= ~emitter ~value (e/emit-now! ~emitter)))
 (defmacro ?emit-in= [emitter time value]
-  `(-?emit= ~emitter ~value (e/emit-in! ~emitter (gensym) ~time)))
-(defmacro ?emit= [emitter value] `(-?emit= ~emitter ~value (e/emit! ~emitter (gensym))))
+  `(-?emit= ~emitter ~value (e/emit-in! ~emitter ~time)))
+(defmacro ?emit= [emitter value] `(-?emit= ~emitter ~value (e/emit! ~emitter)))
 
-(defn conj-action [actions e s] (swap! actions conj {:src s :emitter e}))
+(defn conj-action [actions e] (swap! actions conj e))
 
 (defmacro action-handler [atom event]
-  `(e/handler ([e# s#] (conj-action ~atom e# s#)) ~event))
-(defmacro ?action= [actions [emitter source]]
-  `(?= (deref ~actions) [{:src ~source :emitter ~emitter}]))
+  `(e/handler ([e#] (conj-action ~atom e#)) ~event))
+(defmacro ?action= [actions emitter]
+  `(?= (deref ~actions) [~emitter]))
 (defmacro ?actions= [actions & expected]
-  `(?= (deref ~actions) [~@(map (fn [[e s]] {:emitter e :src s}) expected)]))
+  `(?= (deref ~actions) [~@expected]))
 
 (defmacro with-pipe [[source sink] & body]
   `(let [[~source ~sink] (pipe-)] (with-open [~source ~source ~sink ~sink] ~@body)))
@@ -35,8 +35,8 @@
         h (action-handler actions e)]
     (?handlers= e [h])
     (?events= h [e])
-    (e/emit! e 123)
-    (?action= actions [e 123])))
+    (e/emit! e)
+    (?action= actions e)))
 
 (deftest explicit-conj!
   (let [e (e/event)
@@ -117,7 +117,7 @@
 (deftest cannot-emit-closed-emitter
   (let [e (e/event)]
     (e/close! e)
-    (?throws (e/emit! e 123) ClosedEmitterException)))
+    (?throws (e/emit! e) ClosedEmitterException)))
 
 (deftest cannot-conj-for-closed-emitter-and-absorber
   (let [[e1 e2] (repeatedly 2 #(e/event))
@@ -149,7 +149,7 @@
         h (action-handler actions e)]
     (?true (e/enabled? h))
     (e/disable! h)
-    (e/emit! e 123)
+    (e/emit! e)
     (?= @actions [])
     (?events= h [e])))
 
@@ -160,23 +160,23 @@
     (e/disable! h)
     (e/enable! h)
     (?true (e/enabled? h))
-    (e/emit! e 123)
-    (?action= actions [e 123])))
+    (e/emit! e)
+    (?action= actions e)))
 
 (deftest disabling-event
   (let [actions (atom [])
         e (e/event)
         h (action-handler actions e)]
     (e/disable! e)
-    (e/emit! e 123)
+    (e/emit! e)
     (?actions= actions)))
 
 (deftest events-as-handlers
   (let [actions (atom [])
         e (e/event)
-        h (e/event ([e s] (conj-action actions e s)) e)]
-    (e/emit! e 123)
-    (?action= actions [e 123])))
+        h (e/event ([e s] (conj-action actions e)) e)]
+    (e/emit! e)
+    (?action= actions e)))
 
 (deftest one-shot-event
   (let [e (e/event () :one-shot)]
@@ -189,20 +189,20 @@
         [e1 e2] (repeatedly 2 #(e/event))
         e (e/when-any e1 e2)
         h (action-handler actions e)]
-    (e/emit! e1 1)
-    (?action= actions [e 1])
-    (e/emit! e2 2)
-    (?actions= actions [e 1] [e 2])))
+    (e/emit! e1)
+    (?action= actions e)
+    (e/emit! e2)
+    (?actions= actions e e)))
 
 (deftest when-every-test
   (let [actions (atom [])
         [e1 e2 e3] (repeatedly 3 #(e/event))
         e (e/when-every e1 e2 e3)
         h (action-handler actions e)]
-    (e/emit! e1 1)
-    (e/emit! e2 2)
-    (e/emit! e3 3)
-    (?actions= actions [e 3])
+    (e/emit! e1)
+    (e/emit! e2)
+    (e/emit! e3)
+    (?actions= actions e)
     (?false (e/open? e))))
 
 ;;
@@ -243,39 +243,39 @@
   (with-events [switch [timer 1000] [reader writer] s]
     (e/turn-on! switch)
     (e/disable! writer)
-    (e/emit! s 123)
-    (?actions= actions [switch 123])))
+    (e/emit! s)
+    (?actions= actions switch)))
 
 (deftest emitting-multiset-with-zero-timer
   (with-events [trigger [timer 0] [reader writer] s]
     (e/disable! writer)
-    (e/emit-now! s 123)
-    (?actions= actions [timer 123])))
+    (e/emit-now! s)
+    (?actions= actions timer)))
 
 (deftest emitting-multiset-with-nozero-timer
   (with-events [trigger [timer 5] [reader writer] s]
     (e/disable! writer)
-    (e/emit! s 123)
-    (?actions= actions [timer 123])))
+    (e/emit! s)
+    (?actions= actions timer)))
 
 (deftest selecting-on-multiset-no-active-timer
   (with-events [switch [timer 1000] [reader writer] s]
     (e/disable! writer)
-    (let [f (future (e/emit! s 123) (:emitter (first @actions)))]
+    (let [f (future (e/emit! s) (:emitter (first @actions)))]
       (Thread/sleep 2)
       (e/turn-on! switch)
       (Thread/sleep 2)
-      (?actions= actions [switch 123]))))
+      (?actions= actions switch))))
 
 (deftest multisets-with-simple-selector
   (with-events [switch [timer 10] [reader writer] s]
-    (e/emit! s 123)
-    (?actions= actions [writer 123])))
+    (e/emit! s)
+    (?actions= actions writer)))
 
 (deftest blocking-emit-with-selectors
   (with-events [trigger [timer 10] [reader writer] s]
     (e/disable! writer)
-    (let [f (future (e/emit! s 123) (map :emitter @actions))]
+    (let [f (future (e/emit! s) @actions)]
       (Thread/sleep 3)
       (.write a-pipe-writer (java.nio.ByteBuffer/wrap (byte-array (map byte (range 10)))))
       (?= (seq @f) [reader]))))
@@ -286,8 +286,8 @@
       (with-open [selector (e/selector sink :write)
                   handler (action-handler actions selector)
                   s (e/signal-set selector)]
-        (e/emit! s 123)
-        (?actions= actions [selector 123])))))
+        (e/emit! s)
+        (?actions= actions selector)))))
 
 (deftest selecting-multiset-with-selectors-and-timers
   (with-pipe [source sink]
@@ -296,8 +296,8 @@
                   selector (e/selector sink :write)
                   s (e/signal-set timer selector)
                   handler (action-handler actions selector)]
-        (e/emit! s 123)
-        (?actions= actions [selector 123])))))
+        (e/emit! s)
+        (?actions= actions selector)))))
 
 (deftest selecting-multiset-with-only-switch
   (let [actions (atom [])]
@@ -305,8 +305,8 @@
                 s (e/signal-set e)
                 h (action-handler actions e)]
       (e/turn-on! e)
-      (e/emit! s 123)
-      (?actions= actions [e 123]))))
+      (e/emit! s)
+      (?actions= actions e))))
 
 (deftest selecting-without-selectors
   (let [actions (atom [])]
@@ -315,29 +315,29 @@
                 s (e/signal-set timer switch)
                 h (action-handler actions switch)]
       (e/turn-on! switch)
-      (e/emit! s 123)
-      (?actions= actions [switch 123]))))
+      (e/emit! s)
+      (?actions= actions switch))))
 
 (deftest selecting-multiset-now
   (with-events [switch [timer 0] [reader writer] s]
     (e/turn-on! switch)
-    (e/emit-now! s 123)
-    (?= (set (map :emitter @actions)) #{switch timer writer})))
+    (e/emit-now! s)
+    (?= (set @actions) #{switch timer writer})))
 
 (deftest selecting-multiset-with-timeout
   (with-events [switch [timer 8] [reader writer] s]
     (e/disable! writer)
-    (e/emit-in! s 123 3)
+    (e/emit-in! s 3)
     (?actions= actions)
     (e/turn-on! switch)
     (e/enable! writer)
-    (e/emit-in! s 100 3)
-    (?= (set (map :emitter @actions)) #{switch writer})
+    (e/emit-in! s 3)
+    (?= (set @actions) #{switch writer})
     (e/disable! writer)
     (e/turn-off! switch)
     (reset! actions [])
-    (e/emit-in! s 100 10)
-    (?actions= actions [timer 100])))
+    (e/emit-in! s 10)
+    (?actions= actions timer)))
 
 (deftest closing-multiset
   (with-events [switch [timer 0] [reader writer] s]
@@ -350,7 +350,7 @@
 (deftest disj-on-multiset
   (with-events [switch [timer 0] [reader writer] s]
     (e/disj! s switch timer reader writer)
-    (e/emit-now! s 123)
+    (e/emit-now! s)
     (?= (seq (e/absorbers s)) nil)
     (?= (seq (e/emitters switch)) nil)
     (?= (seq (e/emitters timer)) nil)
