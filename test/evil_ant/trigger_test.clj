@@ -19,7 +19,7 @@
         hs (doall (map #(action-handler a %) es))
         s (apply e/trigger-set es)]
     (doall (map #(e/touch! %) (take 3 (drop 2 es))))
-    (e/emit! s)
+    (?true (e/emit! s))
     (?= (set @a) (set (take 3 (drop 2 es))))))
 
 (deftest trigger-sets-never-block
@@ -27,11 +27,13 @@
         s (apply e/trigger-set es)]
     (let [f (future (e/emit! s))]
       (Thread/sleep 1)
-      (?true (realized? f)))
+      (?true (realized? f))
+      (?false @f))
     (let [f (future (e/emit-in! s 1000))]
       (Thread/sleep 1)
-      (?true (realized? f)))
-    (?true (e/emit-now! s))))
+      (?true (realized? f))
+      (?false @f))
+    (?false (e/emit-now! s))))
 
 (deftest closing-trigger-set
   (let [e (e/trigger)

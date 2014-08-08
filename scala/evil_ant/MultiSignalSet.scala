@@ -7,12 +7,14 @@ class MultiSignalSet extends Emitter[ISignal] {
   val switches = new SwitchSet
   val timers = new TimerSet
   val selectors = new SelectorSet
+  val triggers = new TriggerSet
 
-  override def close() { switches.close(); timers.close(); selectors.close() }
-  override def isOpen = switches.isOpen && timers.isOpen && selectors.isOpen
+  override def close() { switches.close; timers.close; selectors.close; triggers.close }
+  override def isOpen = switches.isOpen && timers.isOpen && selectors.isOpen && triggers.isOpen
 
   override def +=(signal: ISignal) = {
     signal match {
+      case trigger: TriggerSignal => triggers += trigger
       case switch: SwitchSignal => switches += switch
       case timer: TimerSignal => timers += timer
       case selector: SelectorSignal => selectors += selector
@@ -23,6 +25,7 @@ class MultiSignalSet extends Emitter[ISignal] {
 
   override def -=(signal: ISignal) = {
     signal match {
+      case trigger: TriggerSignal => triggers -= trigger
       case switch: SwitchSignal => switches -= switch
       case timer: TimerSignal => timers -= timer
       case selector: SelectorSignal => selectors -= selector
@@ -31,7 +34,8 @@ class MultiSignalSet extends Emitter[ISignal] {
     this
   }
 
-  override def absorbers = switches.absorbers ++ timers.absorbers ++ selectors.absorbers
+  override def absorbers =
+    switches.absorbers ++ timers.absorbers ++ selectors.absorbers ++ triggers.absorbers
 
   private[this] def _emit(select: => Boolean, switch: => Boolean) =
     if(switches.isEmpty) select
@@ -55,12 +59,14 @@ class MultiSignalSet extends Emitter[ISignal] {
     if(switched || selected) true else timers.emitNow
   }
 
-  override def emit = timers.timeout match {
+  override def emit = if(triggers.emit) true 
+  else timers.timeout match {
     case Some(time) => _emit(selectors.emitIn(time), switches.emitIn(time))
     case None => _emit(selectors.emit, switches.emit)
   }
 
-  override def emitIn(millis: Long) = {
+  override def emitIn(millis: Long) = if(triggers.emitIn(millis)) true 
+  else {
     val timeout = timers.timeout match {
       case Some(time) => scala.math.min(time, millis)
       case None => millis
@@ -68,7 +74,8 @@ class MultiSignalSet extends Emitter[ISignal] {
     _emit(selectors.emitIn(timeout), switches.emitIn(timeout))
   }
 
-  override def emitNow = {
+  override def emitNow = if(triggers.emitNow) true
+  else {
     val switched = switches.emitNow
     val selected = selectors.emitNow
     val timedOut = timers.emitNow

@@ -215,51 +215,54 @@
     (.configureBlocking (.source pipe) false)
     [(.source pipe) (.sink pipe)]))
 
-(defmacro with-events [[switch [timer timeout] [reader writer] set] & body]
+(defmacro with-events [[switch trigger [timer timeout] [reader writer] set] & body]
   `(let [pipe# (pipe-)
          ~'actions (atom [])]
      (with-open [~switch (e/switch)
+                 ~trigger (e/trigger)
                  ~timer (e/timer ~timeout)
                  ~'a-pipe-reader (first pipe#)
                  ~'a-pipe-writer (second pipe#)
                  ~reader (e/selector ~'a-pipe-reader :read)
                  ~writer (e/selector ~'a-pipe-writer :write)
-                 ~set (e/signal-set ~switch ~timer ~reader ~writer)
+                 ~set (e/signal-set ~switch ~trigger ~timer ~reader ~writer)
                  switch-handler# (action-handler ~'actions ~switch)
+                 trigger-handler# (action-handler ~'actions ~trigger)
                  timer-handler# (action-handler ~'actions ~timer)
                  reader-handler# (action-handler ~'actions ~reader)
                  writer-handler# (action-handler ~'actions ~writer)]
        ~@body)))
 
 (deftest making-multiset
-  (with-events [switch [timer 123] [reader writer] s]
-    (?= (set (e/absorbers s)) #{switch timer reader writer})
+  (with-events [switch trigger [timer 123] [reader writer] s]
+    (?= (set (e/absorbers s)) #{switch trigger timer reader writer})
     (?= (-> s .switches e/absorbers seq) [switch])
     (?= (-> s .timers e/absorbers seq) [timer])
     (?= (-> s .selectors e/absorbers set) #{reader writer})
+    (?= (-> s .triggers e/absorbers seq) [trigger])
     (?throws (e/conj! s (proxy [evil_ant.Signal] [false])) IllegalArgumentException)))
 
 (deftest emitting-multiset-with-switch
-  (with-events [switch [timer 1000] [reader writer] s]
+  (with-events [switch trigger [timer 1000] [reader writer] s]
     (e/turn-on! switch)
     (e/disable! writer)
     (e/emit! s)
     (?actions= actions switch)))
 
 (deftest emitting-multiset-with-zero-timer
-  (with-events [trigger [timer 0] [reader writer] s]
+  (with-events [switch trigger [timer 0] [reader writer] s]
     (e/disable! writer)
     (e/emit-now! s)
     (?actions= actions timer)))
 
 (deftest emitting-multiset-with-nozero-timer
-  (with-events [trigger [timer 5] [reader writer] s]
+  (with-events [switch trigger [timer 5] [reader writer] s]
     (e/disable! writer)
     (e/emit! s)
     (?actions= actions timer)))
 
 (deftest selecting-on-multiset-no-active-timer
-  (with-events [switch [timer 1000] [reader writer] s]
+  (with-events [switch trigger [timer 1000] [reader writer] s]
     (e/disable! writer)
     (let [f (future (e/emit! s) (:emitter (first @actions)))]
       (Thread/sleep 2)
@@ -268,12 +271,12 @@
       (?actions= actions switch))))
 
 (deftest multisets-with-simple-selector
-  (with-events [switch [timer 10] [reader writer] s]
+  (with-events [switch trigger [timer 10] [reader writer] s]
     (e/emit! s)
     (?actions= actions writer)))
 
 (deftest blocking-emit-with-selectors
-  (with-events [trigger [timer 10] [reader writer] s]
+  (with-events [switch trigger [timer 10] [reader writer] s]
     (e/disable! writer)
     (let [f (future (e/emit! s) @actions)]
       (Thread/sleep 3)
@@ -319,13 +322,13 @@
       (?actions= actions switch))))
 
 (deftest selecting-multiset-now
-  (with-events [switch [timer 0] [reader writer] s]
+  (with-events [switch trigger [timer 0] [reader writer] s]
     (e/turn-on! switch)
     (e/emit-now! s)
     (?= (set @actions) #{switch timer writer})))
 
 (deftest selecting-multiset-with-timeout
-  (with-events [switch [timer 8] [reader writer] s]
+  (with-events [switch trigger [timer 8] [reader writer] s]
     (e/disable! writer)
     (e/emit-in! s 3)
     (?actions= actions)
@@ -339,21 +342,35 @@
     (e/emit-in! s 10)
     (?actions= actions timer)))
 
+(deftest emitting-with-trigger
+  (with-events [selector trigger [timer 10] [reader writer] s]
+    (e/touch! trigger)
+    (e/emit-now! s)
+    (?actions= actions trigger)
+    (e/touch! trigger)
+    (e/emit-in! s 1000)
+    (?actions= actions trigger trigger)
+    (e/touch! trigger)
+    (e/emit! s)
+    (?actions= actions trigger trigger trigger)))
+
 (deftest closing-multiset
-  (with-events [switch [timer 0] [reader writer] s]
+  (with-events [switch trigger [timer 0] [reader writer] s]
     (.close s)
     (?false (.isOpen s))
     (?false (.isOpen (.switches s)))
     (?false (.isOpen (.timers s)))
-    (?false (.isOpen (.selectors s)))))
+    (?false (.isOpen (.selectors s)))
+    (?false (.isOpen (.triggers s)))))
 
 (deftest disj-on-multiset
-  (with-events [switch [timer 0] [reader writer] s]
-    (e/disj! s switch timer reader writer)
+  (with-events [switch trigger [timer 0] [reader writer] s]
+    (e/disj! s switch trigger timer reader writer)
     (e/emit-now! s)
     (?= (seq (e/absorbers s)) nil)
     (?= (seq (e/emitters switch)) nil)
     (?= (seq (e/emitters timer)) nil)
     (?= (seq (e/emitters reader)) nil)
     (?= (seq (e/emitters writer)) nil)
+    (?= (seq (e/emitters trigger)) nil)
     (?throws (e/disj! s (proxy [evil_ant.ISignal] [false])) IllegalArgumentException)))

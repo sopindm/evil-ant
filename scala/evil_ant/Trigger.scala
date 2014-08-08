@@ -14,6 +14,11 @@ final class TriggerSet extends SignalSet[TriggerSignal] with EmitterLike[Trigger
   private[evil_ant] override def activate(s: TriggerSignal) { active = s +: active }
   private[evil_ant] override def deactivate(s: TriggerSignal) {}
 
+  override def emitNow = {
+    requireOpen
+    if(active.isEmpty) false else { doEmit; true }
+  }
+
   override def doEmit = {
     while(!active.isEmpty) {
       val traversing = active
