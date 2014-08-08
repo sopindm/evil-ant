@@ -62,10 +62,6 @@
     (?emit= e [e])
     (?emit= e [e])))
 
-(deftest timers-with-attachment
-  (let [e (e/timer 0 :attachment 100500)]
-    (?= (e/attachment e) 100500)))
-
 (deftest oneoff-timers
   (let [e (e/timer 0 :one-off true)]
     (?emit= e [e])

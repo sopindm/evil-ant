@@ -9,9 +9,6 @@
     (e/turn-on! e)
     (?emit= e [e])))
 
-(deftest making-switch-with-attachment
-  (?= (e/attachment (e/switch :attachment 123)) 123))
-
 (deftest one-off-switches
   (let [e (e/switch :one-off true)]
     (e/turn-on! e)
@@ -52,11 +49,6 @@
       (Thread/sleep 1)
       (?true (realized? f2))
       (?actions= a [e 234]))))
-
-(deftest switches-are-attachable
-  (let [e (e/switch)]
-    (e/attach! e 123)
-    (?= (e/attachment e) 123)))
 
 (deftest turning-switch-off
   (let [e (e/switch)]

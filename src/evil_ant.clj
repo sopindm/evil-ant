@@ -35,9 +35,6 @@
 (defn enable! [obj] (.enable obj))
 (defn disable! [obj] (.disable obj))
 
-(defn attach! [emitter obj] (.attach emitter obj))
-(defn attachment [emitter] (.attachment emitter))
-
 ;;
 ;; Events and handlers 
 ;;
@@ -89,8 +86,7 @@
 (defn touch! [trigger] (.touch trigger))
 
 (defn switch ([] (SwitchSignal.))
-  ([& {:keys [attachment one-off]}]
-     (doto (SwitchSignal. (boolean one-off)) (attach! attachment))))
+  ([& {:keys [one-off]}] (SwitchSignal. (boolean one-off))))
 
 (defn switch-set ([] (SwitchSet.))
   ([& signals] (reduce conj! (switch-set) signals)))
@@ -102,8 +98,7 @@
 (defn timer ([milliseconds] (doto (TimerSignal. milliseconds) start!))
   ([milliseconds & {:keys [circular attachment one-off] :as options}]
      (doto (TimerSignal. milliseconds (boolean circular) (boolean one-off))
-       start!
-       (attach! attachment))))
+       start!)))
 (defn timer-set ([] (TimerSet.))
   ([& timers] (reduce conj! (timer-set) timers)))
 

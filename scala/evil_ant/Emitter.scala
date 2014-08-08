@@ -75,16 +75,11 @@ trait Absorber[This <: Absorber[This, E], E <: Emitter[This]] extends CloseableL
 class IEvent(val oneOff: Boolean) extends EmitterLike[IEvent, IHandler] with Enableable {
   def handlers = absorbers
 
-  @volatile
-  private var _attachment:AnyRef = null
-
-  def attach(obj: AnyRef) { _attachment = obj }
-  def attachment = _attachment
-
-  override def close() { super.close(); _attachment = null }
   override protected def doEmit(value: AnyRef) {
     if(!isEnabled) return
-    super.doEmit(if(attachment != null) attachment else value); if(oneOff) close() }
+    super.doEmit(value)
+    if(oneOff) close()
+  }
 }
 
 trait IHandler extends Absorber[IHandler, IEvent] {
