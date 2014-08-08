@@ -76,12 +76,20 @@
     (?actions= a e)))
 
 (deftest disjing-active-switch
-  (let [e (e/switch) s (e/switch-set e)
-        a (atom []) h (action-handler a e)]
+  (let [e (e/switch)
+        e2 (e/switch)
+        s (e/switch-set e e2)
+        a (atom [])
+        h (action-handler a e)]
     (e/turn-on! e)
+    (e/turn-on! e2)
     (e/disj! s e)
     (e/emit! s)
     (?actions= a)))
+
+(deftest emitting-empty-switch-set
+  (let [s (e/switch-set)]
+    (?false (e/emit-now! s))))
 
 (deftest emitting-on-set-without-turned-on-switches-block
   (let [es (repeatedly 5 #(e/switch))
@@ -112,6 +120,4 @@
     (?throws (e/emit! s) ClosedEmitterException)
     (?throws (e/emit-in! s 111) ClosedEmitterException)
     (?throws (e/emit-now! s) ClosedEmitterException)))
-
-
 

@@ -21,7 +21,7 @@ final class SwitchSet extends SignalSetLike[SwitchSet, SwitchSignal] {
   private[evil_ant] override def activate(s: SwitchSignal) { active += s; signal() }
   private[evil_ant] override def deactivate(s: SwitchSignal) { active -= s }
 
-  override def ready = !active.isEmpty || (active.isEmpty && absorbers.isEmpty)
+  override def ready = !active.isEmpty
 
   override def doEmit = active.foreach(_.callAbsorb(this))
 }

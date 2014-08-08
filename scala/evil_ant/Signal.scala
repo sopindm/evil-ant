@@ -9,11 +9,14 @@ trait BlockingEmitter[T] extends Emitter[T] {
   def await(milliseconds: Long) = if(milliseconds > 0) wait(milliseconds)
 
   override def emit: Boolean = {
+    requireOpen
     this.synchronized { if(!ready) await()}
     super.emit
   }
 
   override def emitIn(milliseconds: Long): Boolean = {
+    requireOpen
+
     val startTime = System.currentTimeMillis
     def remainingTime() = milliseconds - (System.currentTimeMillis() - startTime)
 
@@ -21,7 +24,10 @@ trait BlockingEmitter[T] extends Emitter[T] {
     if(ready) super.emitIn(milliseconds) else false
   }
 
-  override def emitNow = if(ready) super.emitNow else false
+  override def emitNow = {
+    requireOpen
+    if(ready) super.emitNow else false
+  }
 }
 
 abstract class ISignal(oneOff: Boolean) extends IEvent(oneOff)
